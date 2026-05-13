@@ -91,15 +91,7 @@ public:
     void publish(
         const std::string& exchange,
         const std::string& routingKey,
-        const std::string& body,
-        const AMQP::Envelope& envelope = {}
-    );
-
-    // Полная версия с транзакцией.
-    void publishTx(
-        const std::string& exchange,
-        const std::string& routingKey,
-        const AMQP::Envelope& envelope
+        const std::string& body
     );
 
     // --- Каналы ---

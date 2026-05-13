@@ -12,8 +12,9 @@
 
 namespace BlackRabbitMQ {
 
+#include "TcpTransport.h"
+
 class EventLoop;
-class TcpTransport;
 
 // RAII-обёртка над AMQP-соединением с RabbitMQ.
 // Владеет: TcpTransport, EventLoop (поток), AMQP::TcpConnection/Connection.

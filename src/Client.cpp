@@ -183,33 +183,12 @@ void Client::unbindQueue(
 void Client::publish(
     const std::string& exchange,
     const std::string& routingKey,
-    const std::string& body,
-    const AMQP::Envelope& envelope)
+    const std::string& body)
 {
     try {
-        // Создать конверт с телом (бинаро-безопасно: .data() + .size(), не strlen)
+        // Бинарно-безопасно: .data() + .size(), не strlen
         AMQP::Envelope env(body.data(), body.size());
-        env.setDeliveryMode(envelope.deliveryMode());
-        env.setPriority(envelope.priority());
-        env.setCorrelationID(envelope.correlationID());
-        env.setMessageID(envelope.messageID());
-        if (envelope.headers().keys().size() > 0) {
-            env.setHeaders(envelope.headers());
-        }
         getOrCreateChannel().publish(exchange, routingKey, env);
-    } catch (const std::exception& e) {
-        m_error = e.what();
-        throw;
-    }
-}
-
-void Client::publishTx(
-    const std::string& exchange,
-    const std::string& routingKey,
-    const AMQP::Envelope& envelope)
-{
-    try {
-        getOrCreateChannel().publish(exchange, routingKey, envelope);
     } catch (const std::exception& e) {
         m_error = e.what();
         throw;
