@@ -31,7 +31,10 @@ BlackRabbitMQ/
 │       ├── TcpTransportLinux.h/.cpp   — Linux: AMQP::LibEventHandler
 │       └── TcpTransportWindows.h/.cpp — Windows: AMQP::ConnectionHandler (заглушка)
 │
-├── tests/                         — юнит-тесты (см. CMakeLists.txt)
+├── tests/                         — юнит-тесты
+│   ├── CMakeLists.txt             — Google Test (FetchContent)
+│   ├── test_message.cpp           — Message value-объект
+│   └── test_call_context.cpp      — CallContext + MemoryManager
 │
 ├── docs/                          — документация (см. PRD, Этап 6)
 │
