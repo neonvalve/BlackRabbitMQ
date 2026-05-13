@@ -7,11 +7,12 @@ FetchContent_Declare(googletest
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-# Base include directories
+# Base include directories (add AMQP-CPP build dir for headers)
 set(TEST_INCLUDES
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/AddIn1S
     ${CMAKE_SOURCE_DIR}/src/AddIn1S/sdk
+    ${amqpcpp_SOURCE_DIR}/include
 )
 
 # ------------------------------------------------------------------

@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <amqpcpp/table.h>
 
 namespace BlackRabbitMQ {
 

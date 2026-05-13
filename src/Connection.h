@@ -10,9 +10,9 @@
 #include <amqpcpp/libevent.h>
 #endif
 
-namespace BlackRabbitMQ {
-
 #include "TcpTransport.h"
+
+namespace BlackRabbitMQ {
 
 class EventLoop;
 
