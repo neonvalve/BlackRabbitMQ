@@ -1,16 +1,14 @@
 #pragma once
 
+#include <amqpcpp.h>
 #include <atomic>
 #include <memory>
 #include <string>
 #include <chrono>
 
-namespace AMQP {
-    class Address;
-    class TcpConnection;
-    class Channel;
-    class Connection;
-}
+#if defined(__linux__) || defined(__APPLE__)
+#include <amqpcpp/libevent.h>
+#endif
 
 namespace BlackRabbitMQ {
 

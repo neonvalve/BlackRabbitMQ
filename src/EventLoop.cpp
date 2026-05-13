@@ -1,6 +1,7 @@
 #include "EventLoop.h"
 
 #include <thread>
+#include <stdexcept>
 #include <event2/event.h>
 
 namespace BlackRabbitMQ {
