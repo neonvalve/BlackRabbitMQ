@@ -2,6 +2,9 @@
 
 #include "Component.h"
 #include "CallContext.h"
+#include "Message.h"
+
+#include <amqpcpp/table.h>
 
 #include <memory>
 #include <queue>
@@ -12,7 +15,6 @@ namespace BlackRabbitMQ {
 
 class Client;
 class Consumer;
-struct Message;
 
 namespace AddIn1S {
 

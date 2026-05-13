@@ -390,15 +390,14 @@ AMQP::Table RabbitApi1S::headersFromJson(const std::string& propsJson, bool /*fo
 }
 
 std::string RabbitApi1S::lastMessageHeaders() {
-    // Конвертировать AMQP::Table в JSON
-    AMQP::Table& tbl = m_lastMessage.headers;
     json hdr = json::object();
+    AMQP::Table& tbl = m_lastMessage.headers;
     for (const std::string& key : tbl.keys()) {
         const AMQP::Field& field = tbl.get(key);
-        if (field.isBoolean()) hdr[key] = static_cast<bool>(field.get(0));
-        else if (field.isInteger()) hdr[key] = static_cast<int64_t>(field);
+        if (field.isInteger())      hdr[key] = static_cast<int64_t>(field);
         else if (field.isDecimal()) hdr[key] = static_cast<double>(field);
-        else if (field.isString()) hdr[key] = static_cast<const std::string&>(field);
+        else if (field.isString())  hdr[key] = static_cast<const std::string&>(field);
+        else if (field.isBoolean()) hdr[key] = static_cast<bool>(static_cast<int64_t>(field));
     }
     return hdr.dump();
 }

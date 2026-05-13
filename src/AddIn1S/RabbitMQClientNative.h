@@ -3,6 +3,7 @@
 #include "sdk/ComponentBase.h"
 #include "sdk/AddInDefBase.h"
 
+#include <memory>
 #include <string>
 
 namespace BlackRabbitMQ {
