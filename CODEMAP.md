@@ -36,7 +36,10 @@ BlackRabbitMQ/
 │   ├── test_message.cpp           — Message value-объект
 │   └── test_call_context.cpp      — CallContext + MemoryManager
 │
-├── docs/                          — документация (см. PRD, Этап 6)
+├── docs/
+│   ├── architecture.md            — слои, EventLoop, потоки, владение
+│   ├── memory_safety.md           — RAII, порядок уничтожения, ASan/Valgrind
+│   └── usage_examples_1s.md       — примеры из 1С (publish, consume, reject)
 │
 └── reference/                     — клон upstream PinkRabbitMQ (не коммитится)
 ```
@@ -163,4 +166,6 @@ RAII-потребитель. Владеет выделенным `Channel`. Пр
 4. ✅ Client — главный фасад
 5. ✅ Consumer — RAII потребитель с callback'ами
 6. ✅ Граница с 1С (RabbitApi1S, RabbitMQClientNative, AddInNative)
-7. Тестирование (юнит-тесты, Valgrind, ASan)
+7. ✅ Тестирование (юнит-тесты, ASan/UBSan опции)
+8. ✅ Документация (README, architecture, memory_safety, usage_examples_1s)
+9. CI/CD (сборка на Linux + Windows в GitHub Actions)
