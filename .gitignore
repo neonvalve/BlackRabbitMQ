@@ -1,0 +1,37 @@
+# Build artifacts
+build/
+cmake-build-*/
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.exe
+*.exp
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Package
+*.zip
+*.tar.gz
+*.deb
+*.rpm
+
+# Dependencies
+libs/
+lib/
+include/
+
+# Secret files
+.env
+*.pem
+*.key
