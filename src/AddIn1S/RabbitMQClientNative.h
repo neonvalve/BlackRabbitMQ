@@ -85,6 +85,7 @@ public:
 
     // LocaleBase
     virtual void ADDIN_API SetLocale(const WCHAR_T* loc) override;
+    virtual void ADDIN_API SetUserInterfaceLanguageCode(const WCHAR_T* lang) override {}
 
 private:
     std::unique_ptr<RabbitApi1S> m_impl;

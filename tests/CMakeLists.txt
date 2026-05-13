@@ -20,7 +20,7 @@ set(TEST_INCLUDES
 # ------------------------------------------------------------------
 add_executable(test_message test_message.cpp)
 target_include_directories(test_message PRIVATE ${TEST_INCLUDES})
-target_link_libraries(test_message PRIVATE GTest::gtest_main)
+target_link_libraries(test_message PRIVATE GTest::gtest_main amqpcpp)
 add_test(NAME Message COMMAND test_message)
 
 # ------------------------------------------------------------------
