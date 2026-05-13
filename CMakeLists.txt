@@ -34,7 +34,7 @@ FetchContent_MakeAvailable(json)
 # AMQP-CPP
 FetchContent_Declare(amqpcpp
     GIT_REPOSITORY https://github.com/CopernicaMarketingSoftware/AMQP-CPP.git
-    GIT_TAG v4.3.0
+    GIT_TAG master
 )
 set(AMQP-CPP_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 if(PLATFORM_UNIX)

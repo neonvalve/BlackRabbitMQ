@@ -145,7 +145,7 @@ void Channel::consume(
             onMessage(Message::from(msg, deliveryTag, redelivered), deliveryTag, redelivered);
         })
         .onCancelled([onCancelled = std::move(onCancelled)](const std::string& tag) {
-            onCancelled(tag);
+            if (onCancelled) onCancelled(tag);
         })
         .onError([this](const char* msg) { signalError(msg); });
     wait();

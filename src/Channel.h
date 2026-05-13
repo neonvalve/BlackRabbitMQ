@@ -74,7 +74,7 @@ public:
         int flags,
         const AMQP::Table& args,
         std::function<void(const Message&, uint64_t, bool)> onMessage,
-        std::function<void(const std::string&)> onCancelled
+        std::function<void(const std::string&)> onCancelled = nullptr
     );
 
     // --- Ack / Reject ---
