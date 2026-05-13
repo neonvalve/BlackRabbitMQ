@@ -4,7 +4,7 @@
 #include <string>
 #include <sstream>
 #include <stdexcept>
-#include "../types.h"
+#include "types.h"
 
 #if defined(__ANDROID__)
 #include <unistd.h>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <amqpcpp/table.h>
+#include <amqpcpp/message.h>
 #include <string>
 #include <cstdint>
 
