@@ -4,7 +4,7 @@
 
 #include <amqpcpp.h>
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 #include <amqpcpp/libevent.h>
 #endif
 
@@ -36,7 +36,7 @@ void Connection::connect() {
     m_eventLoop.reset(new EventLoop());
 
     // 2. Создать транспорт
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     m_transport.reset(new TcpTransport(m_eventLoop->base()));
 
     // 3. Создать AMQP соединение поверх транспорта
@@ -101,7 +101,7 @@ bool Connection::reconnect() {
 void Connection::waitForReady() {
     auto end = std::chrono::system_clock::now() + std::chrono::seconds(m_timeoutSec);
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     while (!m_amqpConn->ready() && !m_amqpConn->closed()) {
         if (std::chrono::system_clock::now() > end) {
             std::string err = m_transport->error();
@@ -136,7 +136,7 @@ std::unique_ptr<AMQP::Channel> Connection::createChannel() {
         throw std::runtime_error("Connection not established");
     }
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     if (!m_amqpConn->usable()) {
         throw std::runtime_error("Connection is not usable");
     }

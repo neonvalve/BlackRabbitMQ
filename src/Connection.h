@@ -60,7 +60,7 @@ private:
     std::unique_ptr<TcpTransport> m_transport;
     std::unique_ptr<EventLoop> m_eventLoop;
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
     std::unique_ptr<AMQP::TcpConnection> m_amqpConn;
 #elif defined(_WIN32) || defined(_WIN64)
     std::unique_ptr<AMQP::Connection> m_amqpConn;

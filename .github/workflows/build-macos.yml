@@ -1,0 +1,66 @@
+name: Build & Test (macOS)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-clang:
+    name: Clang Release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          brew install libevent openssl
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -- -j$(sysctl -n hw.logicalcpu)
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+
+  integration:
+    name: Integration Tests (RabbitMQ)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          brew install libevent openssl
+
+      - name: Install and start RabbitMQ
+        run: |
+          brew install rabbitmq
+          brew services start rabbitmq
+          # Ждать готовности
+          for i in $(seq 1 30); do
+            if rabbitmqctl status 2>/dev/null | grep -q "Runtime"; then
+              echo "RabbitMQ ready"
+              exit 0
+            fi
+            echo "Waiting for RabbitMQ... $i"
+            sleep 2
+          done
+          echo "RabbitMQ not ready" && exit 1
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DBUILD_INTEGRATION_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -- -j$(sysctl -n hw.logicalcpu)
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+        env:
+          RABBITMQ_HOST: localhost
+          RABBITMQ_PORT: "5672"

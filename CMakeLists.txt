@@ -10,8 +10,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Platform detection
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set(PLATFORM_LINUX ON)
+set(PLATFORM_UNIX OFF)
+set(PLATFORM_WINDOWS OFF)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(PLATFORM_UNIX ON)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set(PLATFORM_WINDOWS ON)
 else()
@@ -34,13 +37,13 @@ FetchContent_Declare(amqpcpp
     GIT_TAG v4.3.19
 )
 set(AMQP-CPP_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-if(PLATFORM_LINUX)
+if(PLATFORM_UNIX)
     set(AMQP-CPP_LINUX_TCP ON CACHE BOOL "" FORCE)
 endif()
 FetchContent_MakeAvailable(amqpcpp)
 
 # Platform-specific dependencies
-if(PLATFORM_LINUX)
+if(PLATFORM_UNIX)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(LIBEVENT REQUIRED libevent)
     pkg_check_modules(OPENSSL REQUIRED openssl)
@@ -59,7 +62,6 @@ set(SOURCES
     src/AddInNative.cpp
     src/AddIn1S/RabbitApi1S.cpp
     src/AddIn1S/RabbitMQClientNative.cpp
-    src/Platform/TcpTransportLinux.cpp
 )
 
 set(HEADERS
@@ -80,25 +82,26 @@ set(HEADERS
     src/AddIn1S/sdk/IMemoryManager.h
     src/AddIn1S/sdk/ComponentBase.h
     src/AddIn1S/sdk/Error.hpp
-    src/Platform/TcpTransportLinux.h
-    src/Platform/TcpTransportWindows.h
 )
 
-if(PLATFORM_LINUX)
+if(PLATFORM_UNIX)
     list(APPEND SOURCES src/Platform/TcpTransportLinux.cpp)
     list(APPEND HEADERS src/Platform/TcpTransportLinux.h)
 elseif(PLATFORM_WINDOWS)
     list(APPEND SOURCES src/Platform/TcpTransportWindows.cpp)
-    list(APPEND HEADERS src/Platform/TcpTransportWindows.h)
 endif()
+list(APPEND HEADERS src/Platform/TcpTransportWindows.h)
 
-# Library target (Linux only currently; Windows — после реализации TcpTransportWindows)
-if(PLATFORM_LINUX)
-    add_library(BlackRabbitMQ SHARED ${SOURCES} ${HEADERS})
-    target_include_directories(BlackRabbitMQ PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# Library target
+add_library(BlackRabbitMQ SHARED ${SOURCES} ${HEADERS})
+target_include_directories(BlackRabbitMQ PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(BlackRabbitMQ PUBLIC
+    nlohmann_json::nlohmann_json
+    amqpcpp
+)
+
+if(PLATFORM_UNIX)
     target_link_libraries(BlackRabbitMQ PUBLIC
-        nlohmann_json::nlohmann_json
-        amqpcpp
         ${LIBEVENT_LIBRARIES}
         ${OPENSSL_LIBRARIES}
     )
@@ -107,11 +110,7 @@ if(PLATFORM_LINUX)
         ${OPENSSL_INCLUDE_DIRS}
     )
 elseif(PLATFORM_WINDOWS)
-    add_library(BlackRabbitMQ SHARED ${SOURCES} ${HEADERS})
-    target_include_directories(BlackRabbitMQ PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_link_libraries(BlackRabbitMQ PUBLIC
-        nlohmann_json::nlohmann_json
-        amqpcpp
         Poco::Foundation
         Poco::Net
         OpenSSL::SSL
@@ -126,8 +125,7 @@ elseif(MSVC)
     target_compile_options(BlackRabbitMQ PRIVATE /W4)
 endif()
 
-# Tests (optional)
-option(BUILD_TESTS "Build unit tests" ON)
+# Sanitizers
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 
@@ -139,6 +137,10 @@ if(ENABLE_UBSAN)
     add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
     add_link_options(-fsanitize=undefined)
 endif()
+
+# Tests
+option(BUILD_TESTS "Build unit tests" ON)
+option(BUILD_INTEGRATION_TESTS "Build integration tests (require RabbitMQ)" OFF)
 
 if(BUILD_TESTS)
     enable_testing()

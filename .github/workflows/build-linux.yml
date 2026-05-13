@@ -7,6 +7,49 @@ on:
     branches: [main]
 
 jobs:
+  integration:
+    name: Integration Tests (RabbitMQ)
+    runs-on: ubuntu-24.04
+    services:
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics check_port_connectivity"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libevent-dev libssl-dev
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DBUILD_INTEGRATION_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -- -j$(nproc)
+
+      - name: Wait for RabbitMQ
+        run: |
+          for i in $(seq 1 30); do
+            if nc -z localhost 5672; then echo "RabbitMQ ready"; exit 0; fi
+            echo "Waiting for RabbitMQ... $i"
+            sleep 2
+          done
+          echo "RabbitMQ not ready" && exit 1
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+        env:
+          RABBITMQ_HOST: localhost
+          RABBITMQ_PORT: "5672"
+
   build-asan:
     name: GCC + AddressSanitizer
     runs-on: ubuntu-24.04

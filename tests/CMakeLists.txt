@@ -31,10 +31,13 @@ target_link_libraries(test_call_context PRIVATE GTest::gtest_main)
 add_test(NAME CallContext COMMAND test_call_context)
 
 # ------------------------------------------------------------------
-# test_client — Client интеграционные тесты (требуют RabbitMQ)
+# test_integration — Интеграционные тесты с RabbitMQ
+# Требуют: RABBITMQ_HOST (по умолчанию localhost:5672)
+# Запуск: cmake -DBUILD_INTEGRATION_TESTS=ON ..
 # ------------------------------------------------------------------
-# Запускаются только при наличии переменной окружения RABBITMQ_HOST
-# add_executable(test_client test_client.cpp)
-# target_include_directories(test_client PRIVATE ${TEST_INCLUDES})
-# target_link_libraries(test_client PRIVATE BlackRabbitMQ GTest::gtest_main)
-# add_test(NAME Client COMMAND test_client)
+if(BUILD_INTEGRATION_TESTS)
+    add_executable(test_integration test_integration.cpp)
+    target_include_directories(test_integration PRIVATE ${TEST_INCLUDES})
+    target_link_libraries(test_integration PRIVATE BlackRabbitMQ GTest::gtest_main)
+    add_test(NAME Integration COMMAND test_integration)
+endif()
