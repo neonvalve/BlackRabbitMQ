@@ -136,16 +136,15 @@ void Channel::consume(
     int flags,
     const AMQP::Table& args,
     std::function<void(const Message&, uint64_t, bool)> onMessage,
-    std::function<void(const std::string&)> onCancelled)
+    std::function<void(const std::string&)> /*onCancelled*/)
 {
+    // NOTE: onCancelled не поддерживается в AMQP-CPP v4.1.4.
+    // Отмена потребителя определяется через channel->usable().
     m_channel->consume(queue, consumerTag, flags, args)
         .onSuccess([this]() { signalSuccess(); })
         .onMessage([onMessage = std::move(onMessage)](
             const AMQP::Message& msg, uint64_t deliveryTag, bool redelivered) {
             onMessage(Message::from(msg, deliveryTag, redelivered), deliveryTag, redelivered);
-        })
-        .onCancelled([onCancelled = std::move(onCancelled)](const std::string& tag) {
-            if (onCancelled) onCancelled(tag);
         })
         .onError([this](const char* msg) { signalError(msg); });
     wait();
