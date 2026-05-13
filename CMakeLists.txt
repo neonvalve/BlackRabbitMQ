@@ -52,6 +52,7 @@ set(SOURCES
     src/EventLoop.cpp
     src/Connection.cpp
     src/Channel.cpp
+    src/Consumer.cpp
     src/Client.cpp
 )
 
@@ -61,6 +62,7 @@ set(HEADERS
     src/Connection.h
     src/Channel.h
     src/Message.h
+    src/Consumer.h
     src/Client.h
     src/Platform/TcpTransportLinux.h
     src/Platform/TcpTransportWindows.h

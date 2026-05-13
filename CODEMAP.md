@@ -75,6 +75,15 @@ Value-объект. Бинарно-безопасное тело (`std::string` 
 Типобезопасные `MessageProperties` вместо `map<int,string>` с магическими числами.
 - Статический фабричный метод `Message::from(AMQP::Message)` для callback'ов
 
+### Consumer (`src/Consumer.h`)
+RAII-потребитель. Владеет выделенным `Channel`. При разрушении отменяет потребителя.
+- `start(channel, queue, ...)` — запускает consume на канале
+- `cancel()` — закрывает канал, вызывает onCancelled
+- Callback'и: `onMessage` (сообщение), `onCancelled` (отмена)
+- Callback'и будут подключены к `ExternalEvent` в `RabbitApi1S`
+- Использует: `Channel`, `Message`
+- Используется: `RabbitApi1S` (будущая граница с 1С)
+
 ### Client (`src/Client.h`)
 Главный фасад. Владеет `Connection` и двумя `Channel` (publish + consume).
 - Переиспользует publish-канал между операциями
@@ -107,5 +116,5 @@ Value-объект. Бинарно-безопасное тело (`std::string` 
 2. ✅ Channel — синхронная обёртка (publish + consume)
 3. ✅ Message + MessageProperties — бинарно-безопасный
 4. ✅ Client — главный фасад
-5. Consumer (событийная модель через ExternalEvent)
+5. ✅ Consumer — RAII потребитель с callback'ами
 6. Граница с 1С (RabbitApi1S, RabbitMQClientNative)
