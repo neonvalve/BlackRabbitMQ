@@ -34,7 +34,9 @@ FetchContent_Declare(amqpcpp
     GIT_TAG v4.3.19
 )
 set(AMQP-CPP_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-set(AMQP-CPP_LINUX_TCP ON CACHE BOOL "" FORCE)
+if(PLATFORM_LINUX)
+    set(AMQP-CPP_LINUX_TCP ON CACHE BOOL "" FORCE)
+endif()
 FetchContent_MakeAvailable(amqpcpp)
 
 # Platform-specific dependencies
@@ -90,16 +92,13 @@ elseif(PLATFORM_WINDOWS)
     list(APPEND HEADERS src/Platform/TcpTransportWindows.h)
 endif()
 
-# Library target
-add_library(BlackRabbitMQ SHARED ${SOURCES} ${HEADERS})
-target_include_directories(BlackRabbitMQ PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(BlackRabbitMQ PUBLIC
-    nlohmann_json::nlohmann_json
-    amqpcpp
-)
-
+# Library target (Linux only currently; Windows — после реализации TcpTransportWindows)
 if(PLATFORM_LINUX)
+    add_library(BlackRabbitMQ SHARED ${SOURCES} ${HEADERS})
+    target_include_directories(BlackRabbitMQ PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_link_libraries(BlackRabbitMQ PUBLIC
+        nlohmann_json::nlohmann_json
+        amqpcpp
         ${LIBEVENT_LIBRARIES}
         ${OPENSSL_LIBRARIES}
     )
@@ -108,19 +107,28 @@ if(PLATFORM_LINUX)
         ${OPENSSL_INCLUDE_DIRS}
     )
 elseif(PLATFORM_WINDOWS)
-    target_link_libraries(BlackRabbitMQ PUBLIC
-        Poco::Foundation
-        Poco::Net
-        OpenSSL::SSL
-        OpenSSL::Crypto
-    )
+    # TODO: раскомментировать при реализации TcpTransportWindows
+    # add_library(BlackRabbitMQ SHARED ${SOURCES} ${HEADERS})
+    # target_include_directories(BlackRabbitMQ PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    # target_link_libraries(BlackRabbitMQ PUBLIC
+    #     nlohmann_json::nlohmann_json
+    #     amqpcpp
+    #     Poco::Foundation
+    #     Poco::Net
+    #     OpenSSL::SSL
+    #     OpenSSL::Crypto
+    # )
 endif()
 
 # Compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(BlackRabbitMQ PRIVATE -Wall -Wextra -Wpedantic)
+    if(PLATFORM_LINUX)
+        target_compile_options(BlackRabbitMQ PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
 elseif(MSVC)
-    target_compile_options(BlackRabbitMQ PRIVATE /W4)
+    if(PLATFORM_WINDOWS)
+        # target_compile_options(BlackRabbitMQ PRIVATE /W4)
+    endif()
 endif()
 
 # Tests (optional)

@@ -10,6 +10,12 @@ BlackRabbitMQ/
 ├── CMakeLists.txt                 — корневой CMake (C++17, FetchContent)
 ├── Main.MD                        — PRD проекта
 ├── .gitignore
+├── CHANGELOG.md                  — история версий (SemVer)
+│
+├── .github/
+│   └── workflows/
+│       ├── build-linux.yml       — CI: GCC + ASan, Clang + UBSan, Release
+│       └── build-windows.yml     — CI: MSVC (активируется после TcpTransportWindows)
 │
 ├── src/                           — исходный код библиотеки
 │   ├── AddInNative.cpp            — точка входа DLL (GetClassObject/DestroyObject)
@@ -168,4 +174,4 @@ RAII-потребитель. Владеет выделенным `Channel`. Пр
 6. ✅ Граница с 1С (RabbitApi1S, RabbitMQClientNative, AddInNative)
 7. ✅ Тестирование (юнит-тесты, ASan/UBSan опции)
 8. ✅ Документация (README, architecture, memory_safety, usage_examples_1s)
-9. CI/CD (сборка на Linux + Windows в GitHub Actions)
+9. ✅ CI/CD (GitHub Actions: Linux GCC/Clang + ASan/UBSan, Windows готов)

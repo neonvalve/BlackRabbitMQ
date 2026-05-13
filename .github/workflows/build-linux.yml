@@ -1,0 +1,74 @@
+name: Build & Test (Linux)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-asan:
+    name: GCC + AddressSanitizer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libevent-dev libssl-dev
+
+      - name: Configure CMake (Debug + ASan)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DENABLE_UBSAN=OFF -DBUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -- -j$(nproc)
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+
+  build-release:
+    name: GCC Release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libevent-dev libssl-dev
+
+      - name: Configure CMake (Release)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_ASAN=OFF -DBUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -- -j$(nproc)
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+
+  build-clang:
+    name: Clang + UBSan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libevent-dev libssl-dev clang
+
+      - name: Configure CMake (Clang + UBSan)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=OFF -DENABLE_UBSAN=ON -DBUILD_TESTS=ON
+        env:
+          CC: clang
+          CXX: clang++
+
+      - name: Build
+        run: cmake --build build -- -j$(nproc)
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
