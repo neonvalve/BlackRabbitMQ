@@ -51,6 +51,7 @@ public:
         eMethGetRoutingKey,
         eMethGetHeaders,
         eMethSleepNative,
+        eMethEnableExternalEvent,
         eMethLast
     };
 

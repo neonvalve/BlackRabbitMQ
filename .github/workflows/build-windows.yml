@@ -33,32 +33,22 @@ jobs:
         working-directory: build
         run: ctest --output-on-failure -C Release
 
-  # TODO: активировать после реализации TcpTransportWindows
-  # build-asan:
-  #   name: MSVC + AddressSanitizer
-  #   runs-on: windows-2025
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install dependencies
-  #       run: |
-  #         vcpkg install poco[netssl]:x64-windows
-  #         vcpkg install openssl:x64-windows
-  #     - name: Configure (ASan)
-  #       run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DBUILD_TESTS=ON
-  #     - name: Build
-  #       run: cmake --build build --config Debug
-  #     - name: Test
-  #       run: ctest --test-dir build -C Debug --output-on-failure
+  build-asan:
+    name: MSVC + AddressSanitizer
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
 
-  # TODO: активировать после реализации TcpTransportWindows
-  # build-clang:
-  #   name: Clang-cl Release
-  #   runs-on: windows-2025
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Configure
-  #       run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -T ClangCL
-  #     - name: Build
-  #       run: cmake --build build --config Release
-  #     - name: Test
-  #       run: ctest --test-dir build -C Release --output-on-failure
+      - name: Install dependencies
+        run: |
+          vcpkg install poco[netssl]:x64-windows
+          vcpkg install openssl:x64-windows
+
+      - name: Configure (ASan)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DBUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config Debug
+
+      - name: Test
+        run: ctest --test-dir build -C Debug --output-on-failure

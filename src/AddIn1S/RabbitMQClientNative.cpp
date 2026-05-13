@@ -162,6 +162,7 @@ long RabbitMQClientNative::FindMethod(const WCHAR_T* wsMethodName) {
     if (std::u16string(name) == u"GetRoutingKey")        return eMethGetRoutingKey;
     if (std::u16string(name) == u"GetHeaders")           return eMethGetHeaders;
     if (std::u16string(name) == u"SleepNative")          return eMethSleepNative;
+    if (std::u16string(name) == u"EnableExternalEvent")  return eMethEnableExternalEvent;
 
     return -1;
 }
@@ -187,6 +188,7 @@ const WCHAR_T* RabbitMQClientNative::GetMethodName(const long lMethodNum, const 
         case eMethGetRoutingKey:        return L"GetRoutingKey";
         case eMethGetHeaders:           return L"GetHeaders";
         case eMethSleepNative:          return L"SleepNative";
+        case eMethEnableExternalEvent:  return L"EnableExternalEvent";
         default: return nullptr;
     }
 }
@@ -208,6 +210,7 @@ long RabbitMQClientNative::GetNParams(const long lMethodNum) {
         case eMethSetPriority:
         case eMethSleepNative:          return 1;
         case eMethBasicReject:          return 2;  // tag + requeue (НОВЫЙ!)
+        case eMethEnableExternalEvent:  return 1;  // bool enable
         default: return 0;
     }
 }
@@ -266,6 +269,13 @@ bool RabbitMQClientNative::GetParamDefValue(const long lMethodNum, const long lP
                 return true;
             }
             break;
+        case eMethEnableExternalEvent:
+            if (lParamNum == 0) {
+                TV_VT(pvarParamDefValue) = VTYPE_BOOL;
+                TV_BOOL(pvarParamDefValue) = false;
+                return true;
+            }
+            break;
     }
     return false;
 }
@@ -314,6 +324,8 @@ bool RabbitMQClientNative::CallAsProc(const long lMethodNum,
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::setPriorityImpl, paParams, lSizeArray);
         case eMethSleepNative:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::sleepNativeImpl, paParams, lSizeArray);
+        case eMethEnableExternalEvent:
+            return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::enableExternalEventImpl, paParams, lSizeArray);
         default:
             return false;
     }

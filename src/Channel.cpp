@@ -5,11 +5,11 @@
 
 namespace BlackRabbitMQ {
 
-Channel::Channel(std::unique_ptr<AMQP::TcpChannel> ch)
+Channel::Channel(std::unique_ptr<AMQP::Channel> ch)
     : m_channel(std::move(ch))
 {
     if (!m_channel) {
-        throw std::runtime_error("Channel: null TcpChannel");
+        throw std::runtime_error("Channel: null Channel");
     }
 }
 

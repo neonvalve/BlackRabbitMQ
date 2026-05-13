@@ -58,12 +58,20 @@ public:
 
     // BasicConsume(queue, consumerId, noConfirm, exclusive, selectSize, propsJson)
     // Возвращает consumerTag.
+    // Поддерживает два режима:
+    //   - Legacy polling: сообщения в m_messageQueue, читать через BasicConsumeMessage
+    //   - Event-driven: сообщения через ExternalEvent (если включено)
     void basicConsumeImpl(CallContext& ctx);
 
     // BasicConsumeMessage(skip, &outData, &outMessageTag, timeout)
     // Возвращает тело сообщения и deliveryTag.
     // Для обратной совместимости — polling режим.
     void basicConsumeMessageImpl(CallContext& ctx);
+
+    // Включить событийную модель: сообщения доставляются через ExternalEvent.
+    // После вызова BasicConsume сообщения приходят в ОбработкаВнешнегоСобытия.
+    void enableExternalEvent(bool enable) { m_useExternalEvent = enable; }
+    bool isExternalEventEnabled() const { return m_useExternalEvent; }
 
     // BasicCancel()
     void basicCancelImpl(CallContext& ctx);
@@ -77,6 +85,9 @@ public:
 
     // SleepNative(milliseconds)
     void sleepNativeImpl(CallContext& ctx);
+
+    // EnableExternalEvent(enable) — включить/выключить событийную модель
+    void enableExternalEventImpl(CallContext& ctx);
 
     // --- Properties ---
     void getRoutingKeyImpl(CallContext& ctx);
@@ -100,6 +111,7 @@ private:
     std::mutex m_queueMutex;
     std::condition_variable m_cvDataArrived;
     std::string m_consumerError;
+    bool m_useExternalEvent = false;
 
     // Последнее полученное сообщение
     Message m_lastMessage;

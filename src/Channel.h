@@ -12,13 +12,15 @@ namespace BlackRabbitMQ {
 
 struct Message;
 
-// Обёртка над AMQP::TcpChannel с синхронным API.
+// Обёртка над AMQP::Channel с синхронным API.
 // Каждая операция (declare, bind, publish) блокируется до ответа брокера
 // и либо завершается успешно, либо бросает std::runtime_error.
 // EventLoop должен быть запущен до вызова методов Channel.
+// Работает на Linux (Channel) и Windows (Channel) через базовый тип.
 class Channel {
 public:
-    explicit Channel(std::unique_ptr<AMQP::TcpChannel> ch);
+    // Принимает Channel (Linux) или Channel (Windows) — оба наследуют AMQP::Channel
+    explicit Channel(std::unique_ptr<AMQP::Channel> ch);
     ~Channel();
 
     Channel(const Channel&) = delete;
@@ -80,7 +82,7 @@ public:
     void reject(uint64_t deliveryTag, bool requeue);
 
     // Прямой доступ к AMQP-каналу для продвинутых сценариев.
-    AMQP::TcpChannel* raw() const noexcept { return m_channel.get(); }
+    AMQP::Channel* raw() const noexcept { return m_channel.get(); }
 
     // Проверка, жив ли канал.
     bool usable() const noexcept {
@@ -92,7 +94,7 @@ private:
     void signalSuccess();
     void signalError(const char* message);
 
-    std::unique_ptr<AMQP::TcpChannel> m_channel;
+    std::unique_ptr<AMQP::Channel> m_channel;
 
     std::mutex m_mutex;
     std::condition_variable m_cv;

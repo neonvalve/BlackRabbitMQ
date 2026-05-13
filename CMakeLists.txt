@@ -107,28 +107,23 @@ if(PLATFORM_LINUX)
         ${OPENSSL_INCLUDE_DIRS}
     )
 elseif(PLATFORM_WINDOWS)
-    # TODO: раскомментировать при реализации TcpTransportWindows
-    # add_library(BlackRabbitMQ SHARED ${SOURCES} ${HEADERS})
-    # target_include_directories(BlackRabbitMQ PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    # target_link_libraries(BlackRabbitMQ PUBLIC
-    #     nlohmann_json::nlohmann_json
-    #     amqpcpp
-    #     Poco::Foundation
-    #     Poco::Net
-    #     OpenSSL::SSL
-    #     OpenSSL::Crypto
-    # )
+    add_library(BlackRabbitMQ SHARED ${SOURCES} ${HEADERS})
+    target_include_directories(BlackRabbitMQ PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(BlackRabbitMQ PUBLIC
+        nlohmann_json::nlohmann_json
+        amqpcpp
+        Poco::Foundation
+        Poco::Net
+        OpenSSL::SSL
+        OpenSSL::Crypto
+    )
 endif()
 
 # Compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    if(PLATFORM_LINUX)
-        target_compile_options(BlackRabbitMQ PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
+    target_compile_options(BlackRabbitMQ PRIVATE -Wall -Wextra -Wpedantic)
 elseif(MSVC)
-    if(PLATFORM_WINDOWS)
-        # target_compile_options(BlackRabbitMQ PRIVATE /W4)
-    endif()
+    target_compile_options(BlackRabbitMQ PRIVATE /W4)
 endif()
 
 # Tests (optional)

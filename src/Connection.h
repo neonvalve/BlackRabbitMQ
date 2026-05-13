@@ -8,7 +8,8 @@
 namespace AMQP {
     class Address;
     class TcpConnection;
-    class TcpChannel;
+    class Channel;
+    class Connection;
 }
 
 namespace BlackRabbitMQ {
@@ -17,7 +18,7 @@ class EventLoop;
 class TcpTransport;
 
 // RAII-обёртка над AMQP-соединением с RabbitMQ.
-// Владеет: TcpTransport, EventLoop (поток), AMQP::TcpConnection.
+// Владеет: TcpTransport, EventLoop (поток), AMQP::TcpConnection/Connection.
 // Поддерживает heartbeat через onNegotiate.
 class Connection {
 public:
@@ -40,7 +41,9 @@ public:
     bool isConnected() const noexcept { return m_connected.load(std::memory_order_acquire); }
 
     // Создать новый канал. Владелец — вызывающий.
-    std::unique_ptr<AMQP::TcpChannel> createChannel();
+    // Linux: TcpChannel (наследник AMQP::Channel)
+    // Windows: AMQP::Channel
+    std::unique_ptr<AMQP::Channel> createChannel();
 
     // Доступ к event loop (для продвинутых сценариев).
     EventLoop* eventLoop() const noexcept { return m_eventLoop.get(); }
@@ -56,7 +59,12 @@ private:
 
     std::unique_ptr<TcpTransport> m_transport;
     std::unique_ptr<EventLoop> m_eventLoop;
+
+#if defined(__linux__)
     std::unique_ptr<AMQP::TcpConnection> m_amqpConn;
+#elif defined(_WIN32) || defined(_WIN64)
+    std::unique_ptr<AMQP::Connection> m_amqpConn;
+#endif
 
     std::atomic<bool> m_connected;
     std::string m_error;

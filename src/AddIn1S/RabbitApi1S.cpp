@@ -199,14 +199,45 @@ void RabbitApi1S::basicConsumeImpl(CallContext& ctx) {
         args,
         // onMessage
         [this](const Message& msg) {
-            std::lock_guard<std::mutex> lock(m_queueMutex);
-            m_messageQueue.push(msg);
-            m_cvDataArrived.notify_all();
+            if (m_useExternalEvent && m_addin) {
+                // Событийная модель: отправить ExternalEvent в 1С
+                json eventData;
+                eventData["body"] = msg.body;
+                eventData["deliveryTag"] = msg.deliveryTag;
+                eventData["routingKey"] = msg.routingKey;
+                eventData["priority"] = msg.priority;
+                eventData["redelivered"] = msg.redelivered;
+                eventData["correlationId"] = msg.props.correlationId;
+                eventData["messageId"] = msg.props.messageId;
+                eventData["contentType"] = msg.props.contentType;
+
+                std::u16string u16data = m_converter.from_bytes(eventData.dump());
+                m_addin->ExternalEvent(
+                    const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(u"BlackRabbitMQ")),
+                    const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(u"MessageReceived")),
+                    const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(u16data.c_str()))
+                );
+            }
+            // Всегда сохраняем в очередь для обратной совместимости
+            {
+                std::lock_guard<std::mutex> lock(m_queueMutex);
+                m_messageQueue.push(msg);
+                m_cvDataArrived.notify_all();
+            }
         },
         // onCancelled
         [this](const std::string& consumerTag) {
             std::lock_guard<std::mutex> lock(m_queueMutex);
             m_consumerError = "Consumer cancelled: " + consumerTag;
+            if (m_useExternalEvent && m_addin) {
+                // Уведомить 1С об отмене потребителя
+                std::u16string u16tag = m_converter.from_bytes(consumerTag);
+                m_addin->ExternalEvent(
+                    const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(u"BlackRabbitMQ")),
+                    const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(u"ConsumerCancelled")),
+                    const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(u16tag.c_str()))
+                );
+            }
         }
     );
 
@@ -283,6 +314,13 @@ void RabbitApi1S::basicRejectImpl(CallContext& ctx) {
 void RabbitApi1S::basicCancelImpl(CallContext& /*ctx*/) {
     checkConnection();
     clear();
+}
+
+// --- ExternalEvent ---
+
+void RabbitApi1S::enableExternalEventImpl(CallContext& ctx) {
+    bool enable = ctx.boolParam();
+    enableExternalEvent(enable);
 }
 
 // --- Sleep ---
