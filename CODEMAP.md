@@ -35,7 +35,7 @@ BlackRabbitMQ/
 │   │   └── sdk/                   — заголовки 1С SDK (не изменяются)
 │   └── Platform/
 │       ├── TcpTransportLinux.h/.cpp   — Linux: AMQP::LibEventHandler
-│       └── TcpTransportWindows.h/.cpp — Windows: AMQP::ConnectionHandler (заглушка)
+│       └── TcpTransportWindows.h/.cpp — Windows: AMQP::ConnectionHandler (POCO)
 │
 ├── tests/                         — юнит-тесты
 │   ├── CMakeLists.txt             — Google Test (FetchContent)
