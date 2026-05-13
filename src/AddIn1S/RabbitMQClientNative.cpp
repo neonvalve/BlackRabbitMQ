@@ -7,7 +7,7 @@
 namespace BlackRabbitMQ {
 namespace AddIn1S {
 
-const WCHAR_T* RabbitMQClientNative::componentName = L"BlackRabbitMQ";
+const WCHAR_T* RabbitMQClientNative::componentName = u"BlackRabbitMQ";
 
 // --- Init / Done ---
 
@@ -66,17 +66,17 @@ long RabbitMQClientNative::FindProp(const WCHAR_T* wsPropName) {
 
 const WCHAR_T* RabbitMQClientNative::GetPropName(long lPropNum, long /*lPropAlias*/) {
     switch (lPropNum) {
-        case ePropVersion:          return L"Version";
-        case ePropCorrelationId:    return L"CorrelationId";
-        case ePropType:             return L"Type";
-        case ePropMessageId:        return L"MessageId";
-        case ePropAppId:            return L"AppId";
-        case ePropContentEncoding:  return L"ContentEncoding";
-        case ePropContentType:      return L"ContentType";
-        case ePropUserId:           return L"UserId";
-        case ePropClusterId:        return L"ClusterId";
-        case ePropExpiration:       return L"Expiration";
-        case ePropReplyTo:          return L"ReplyTo";
+        case ePropVersion:          return u"Version";
+        case ePropCorrelationId:    return u"CorrelationId";
+        case ePropType:             return u"Type";
+        case ePropMessageId:        return u"MessageId";
+        case ePropAppId:            return u"AppId";
+        case ePropContentEncoding:  return u"ContentEncoding";
+        case ePropContentType:      return u"ContentType";
+        case ePropUserId:           return u"UserId";
+        case ePropClusterId:        return u"ClusterId";
+        case ePropExpiration:       return u"Expiration";
+        case ePropReplyTo:          return u"ReplyTo";
         default: return nullptr;
     }
 }
@@ -169,26 +169,26 @@ long RabbitMQClientNative::FindMethod(const WCHAR_T* wsMethodName) {
 
 const WCHAR_T* RabbitMQClientNative::GetMethodName(const long lMethodNum, const long /*lMethodAlias*/) {
     switch (lMethodNum) {
-        case eMethGetLastError:         return L"GetLastError";
-        case eMethConnect:              return L"Connect";
-        case eMethDeclareQueue:         return L"DeclareQueue";
-        case eMethBasicPublish:         return L"BasicPublish";
-        case eMethBasicConsume:         return L"BasicConsume";
-        case eMethBasicConsumeMessage:  return L"BasicConsumeMessage";
-        case eMethBasicCancel:          return L"BasicCancel";
-        case eMethBasicAck:             return L"BasicAck";
-        case eMethDeleteQueue:          return L"DeleteQueue";
-        case eMethBindQueue:            return L"BindQueue";
-        case eMethBasicReject:          return L"BasicReject";
-        case eMethDeclareExchange:      return L"DeclareExchange";
-        case eMethDeleteExchange:       return L"DeleteExchange";
-        case eMethUnbindQueue:          return L"UnbindQueue";
-        case eMethSetPriority:          return L"SetPriority";
-        case eMethGetPriority:          return L"GetPriority";
-        case eMethGetRoutingKey:        return L"GetRoutingKey";
-        case eMethGetHeaders:           return L"GetHeaders";
-        case eMethSleepNative:          return L"SleepNative";
-        case eMethEnableExternalEvent:  return L"EnableExternalEvent";
+        case eMethGetLastError:         return u"GetLastError";
+        case eMethConnect:              return u"Connect";
+        case eMethDeclareQueue:         return u"DeclareQueue";
+        case eMethBasicPublish:         return u"BasicPublish";
+        case eMethBasicConsume:         return u"BasicConsume";
+        case eMethBasicConsumeMessage:  return u"BasicConsumeMessage";
+        case eMethBasicCancel:          return u"BasicCancel";
+        case eMethBasicAck:             return u"BasicAck";
+        case eMethDeleteQueue:          return u"DeleteQueue";
+        case eMethBindQueue:            return u"BindQueue";
+        case eMethBasicReject:          return u"BasicReject";
+        case eMethDeclareExchange:      return u"DeclareExchange";
+        case eMethDeleteExchange:       return u"DeleteExchange";
+        case eMethUnbindQueue:          return u"UnbindQueue";
+        case eMethSetPriority:          return u"SetPriority";
+        case eMethGetPriority:          return u"GetPriority";
+        case eMethGetRoutingKey:        return u"GetRoutingKey";
+        case eMethGetHeaders:           return u"GetHeaders";
+        case eMethSleepNative:          return u"SleepNative";
+        case eMethEnableExternalEvent:  return u"EnableExternalEvent";
         default: return nullptr;
     }
 }
