@@ -102,6 +102,11 @@ public:
         const AMQP::Envelope& envelope
     );
 
+    // --- Каналы ---
+
+    // Создать новый канал. Вызывающий владеет каналом.
+    std::unique_ptr<Channel> createChannel();
+
     // --- Consume (событийная модель) ---
 
     // Запустить потребителя. onMessage вызывается из потока EventLoop.

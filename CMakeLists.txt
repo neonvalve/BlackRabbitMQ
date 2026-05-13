@@ -54,6 +54,10 @@ set(SOURCES
     src/Channel.cpp
     src/Consumer.cpp
     src/Client.cpp
+    src/AddInNative.cpp
+    src/AddIn1S/RabbitApi1S.cpp
+    src/AddIn1S/RabbitMQClientNative.cpp
+    src/Platform/TcpTransportLinux.cpp
 )
 
 set(HEADERS
@@ -64,6 +68,16 @@ set(HEADERS
     src/Message.h
     src/Consumer.h
     src/Client.h
+    src/AddIn1S/MemoryManager.h
+    src/AddIn1S/CallContext.h
+    src/AddIn1S/Component.h
+    src/AddIn1S/RabbitApi1S.h
+    src/AddIn1S/RabbitMQClientNative.h
+    src/AddIn1S/sdk/AddInDefBase.h
+    src/AddIn1S/sdk/types.h
+    src/AddIn1S/sdk/IMemoryManager.h
+    src/AddIn1S/sdk/ComponentBase.h
+    src/AddIn1S/sdk/Error.hpp
     src/Platform/TcpTransportLinux.h
     src/Platform/TcpTransportWindows.h
 )

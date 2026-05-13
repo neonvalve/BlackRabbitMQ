@@ -12,12 +12,21 @@ BlackRabbitMQ/
 ├── .gitignore
 │
 ├── src/                           — исходный код библиотеки
+│   ├── AddInNative.cpp            — точка входа DLL (GetClassObject/DestroyObject)
 │   ├── EventLoop.h/.cpp           — RAII event loop (libevent, блокирующий)
 │   ├── TcpTransport.h             — платформенный селектор транспорта
 │   ├── Connection.h/.cpp          — RAII соединение с RabbitMQ
 │   ├── Channel.h/.cpp             — синхронная обёртка над AMQP::TcpChannel
 │   ├── Message.h                  — value-объект сообщения (бинаро-безопасный)
+│   ├── Consumer.h/.cpp            — RAII потребитель с callback'ами
 │   ├── Client.h/.cpp              — главный фасад (connect, publish, consume...)
+│   ├── AddIn1S/
+│   │   ├── MemoryManager.h        — обёртка над IMemoryManager 1С
+│   │   ├── CallContext.h          — адаптер параметров tVariant* → C++
+│   │   ├── Component.h            — базовый класс (wrapCall, addError, lastError)
+│   │   ├── RabbitApi1S.h/.cpp     — фасад над Client/Consumer (совместимый API)
+│   │   ├── RabbitMQClientNative.h/.cpp — IComponentBase (таблицы методов/свойств)
+│   │   └── sdk/                   — заголовки 1С SDK (не изменяются)
 │   └── Platform/
 │       ├── TcpTransportLinux.h/.cpp   — Linux: AMQP::LibEventHandler
 │       └── TcpTransportWindows.h/.cpp — Windows: AMQP::ConnectionHandler (заглушка)
@@ -90,6 +99,39 @@ RAII-потребитель. Владеет выделенным `Channel`. Пр
 - Consume-канал живёт пока активен потребитель
 - `ack`/`reject` через publish-канал (как в upstream)
 
+### Граница 1С (`src/AddIn1S/`)
+
+#### MemoryManager (`src/AddIn1S/MemoryManager.h`)
+Обёртка над `IMemoryManager` — контракт памяти 1С. Все строки, возвращаемые в 1С,
+аллоцируются через `AllocMemory`.
+
+#### CallContext (`src/AddIn1S/CallContext.h`)
+Адаптер параметров: обходит массив `tVariant*`, выдаёт типизированные значения
+(`stringParamUtf8()`, `intParam()`, `boolParam()`). Записывает результат в
+`tVariant*` (`setStringResult`, `setBoolResult`, ...).
+
+#### Component (`src/AddIn1S/Component.h`)
+Базовый класс для 1С-компоненты:
+- `init(IAddInDefBase*)` / `done()` — жизненный цикл
+- `wrapCall(proc, params)` — вызов с перехватом исключений → `addError`
+- `addError(descr)` → `AddInDefBase::AddError` (исключение в 1С)
+- `getLastError` / `getVersion`
+
+#### RabbitApi1S (`src/AddIn1S/RabbitApi1S.h`)
+Совместимый с 1С API над `Client` и `Consumer`. Методы: `Connect`, `BasicPublish`,
+`BasicConsume`, `BasicConsumeMessage`, `BasicAck`, `BasicReject(tag, requeue)`, ...
+- Исключения не прокидываются в 1С — всё через `lastError`
+- `BasicReject` с параметром `requeue` (исправлено против upstream)
+- Использует: `Client`, `Consumer`, `Component`
+
+#### RabbitMQClientNative (`src/AddIn1S/RabbitMQClientNative.h`)
+Реализация `IComponentBase`: статические таблицы методов/свойств, диспетчеризация
+`CallAsProc`/`CallAsFunc` → `RabbitApi1S`.
+- Используется: `AddInNative.cpp` (точка входа DLL)
+
+#### AddInNative.cpp (`src/AddInNative.cpp`)
+Точка входа DLL: экспортирует `GetClassObject`, `DestroyObject`, `GetClassNames`.
+
 ## Исправления против upstream (BITERP/PinkRabbitMQ v2.2.0.53)
 
 | Проблема | Было | Стало |
@@ -117,4 +159,5 @@ RAII-потребитель. Владеет выделенным `Channel`. Пр
 3. ✅ Message + MessageProperties — бинарно-безопасный
 4. ✅ Client — главный фасад
 5. ✅ Consumer — RAII потребитель с callback'ами
-6. Граница с 1С (RabbitApi1S, RabbitMQClientNative)
+6. ✅ Граница с 1С (RabbitApi1S, RabbitMQClientNative, AddInNative)
+7. Тестирование (юнит-тесты, Valgrind, ASan)

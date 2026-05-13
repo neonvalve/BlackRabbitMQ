@@ -67,6 +67,15 @@ bool Client::reconnect() {
     }
 }
 
+// --- Каналы ---
+
+std::unique_ptr<Channel> Client::createChannel() {
+    if (!m_connection || !m_connection->isConnected()) {
+        throw std::runtime_error("Not connected");
+    }
+    return std::make_unique<Channel>(m_connection->createChannel());
+}
+
 // --- Вспомогательные методы ---
 
 Channel& Client::getOrCreateChannel() {
