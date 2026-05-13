@@ -18,7 +18,12 @@ jobs:
           brew install libevent openssl
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON \
+            -DOPENSSL_ROOT_DIR=$(brew --prefix openssl) \
+            -DLIBEVENT_ROOT_DIR=$(brew --prefix libevent)
+        env:
+          PKG_CONFIG_PATH: "$(brew --prefix openssl)/lib/pkgconfig:$(brew --prefix libevent)/lib/pkgconfig"
 
       - name: Build
         run: cmake --build build -- -j$(sysctl -n hw.logicalcpu)
@@ -53,7 +58,12 @@ jobs:
           echo "RabbitMQ not ready" && exit 1
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DBUILD_INTEGRATION_TESTS=ON
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DBUILD_INTEGRATION_TESTS=ON \
+            -DOPENSSL_ROOT_DIR=$(brew --prefix openssl) \
+            -DLIBEVENT_ROOT_DIR=$(brew --prefix libevent)
+        env:
+          PKG_CONFIG_PATH: "$(brew --prefix openssl)/lib/pkgconfig:$(brew --prefix libevent)/lib/pkgconfig"
 
       - name: Build
         run: cmake --build build -- -j$(sysctl -n hw.logicalcpu)
