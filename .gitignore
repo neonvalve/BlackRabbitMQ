@@ -35,3 +35,4 @@ include/
 .env
 *.pem
 *.key
+reference/
