@@ -2,6 +2,7 @@
 #include "CallContext.h"
 #include "MemoryManager.h"
 #include "sdk/types.h"
+#include <vector>
 
 using namespace BlackRabbitMQ::AddIn1S;
 
@@ -47,13 +48,17 @@ TEST(MemoryManager, VariantFromStringReturnsFalseWithoutHandle) {
 // CallContext — чтение параметров из tVariant массива
 // ------------------------------------------------------------------
 
-// Вспомогательная функция для создания tVariant со строкой
-// (без MemoryManager — строка в pwstrVal вручную)
+// Вспомогательная функция для создания tVariant со строкой.
+// Строки хранятся в статическом векторе, чтобы указатели не висели.
+std::vector<std::u16string> g_stringStorage;
+
 tVariant makeStringParam(const std::u16string& str) {
+    g_stringStorage.push_back(str);
+    const auto& stored = g_stringStorage.back();
     tVariant v;
     v.vt = VTYPE_PWSTR;
-    v.pwstrVal = const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(str.c_str()));
-    v.wstrLen = static_cast<uint32_t>(str.length());
+    v.pwstrVal = const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(stored.c_str()));
+    v.wstrLen = static_cast<uint32_t>(stored.length());
     return v;
 }
 
