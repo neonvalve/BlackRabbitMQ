@@ -82,6 +82,7 @@ protected:
     void setSkipAddError(bool skip = true) { m_skipAddError = skip; }
     void setVersion(const std::string& version) { m_version = version; }
 
+public:
     // Шаблон wrapCall: вызывает метод, ловит исключения, обновляет lastError.
     // Возвращает true при успехе, false при ошибке.
     template<typename T, typename Proc>
