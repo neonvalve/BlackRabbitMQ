@@ -20,9 +20,15 @@ jobs:
       - name: Configure CMake
         run: |
           export PKG_CONFIG_PATH="$(brew --prefix openssl)/lib/pkgconfig:$(brew --prefix libevent)/lib/pkgconfig"
+          export OPENSSL_DIR="$(brew --prefix openssl)"
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON \
-            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)" \
-            -DLIBEVENT_ROOT_DIR="$(brew --prefix libevent)"
+            -DOPENSSL_ROOT_DIR="$OPENSSL_DIR" \
+            -DOPENSSL_INCLUDE_DIR="$OPENSSL_DIR/include" \
+            -DOPENSSL_SSL_LIBRARY="$OPENSSL_DIR/lib/libssl.dylib" \
+            -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_DIR/lib/libcrypto.dylib" \
+            -DLIBEVENT_ROOT_DIR="$(brew --prefix libevent)" \
+            -DCMAKE_C_FLAGS="-I$OPENSSL_DIR/include" \
+            -DCMAKE_CXX_FLAGS="-I$OPENSSL_DIR/include"
 
       - name: Build
         run: cmake --build build -- -j$(sysctl -n hw.logicalcpu)
@@ -59,9 +65,15 @@ jobs:
       - name: Configure CMake
         run: |
           export PKG_CONFIG_PATH="$(brew --prefix openssl)/lib/pkgconfig:$(brew --prefix libevent)/lib/pkgconfig"
+          export OPENSSL_DIR="$(brew --prefix openssl)"
           cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DBUILD_INTEGRATION_TESTS=ON \
-            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)" \
-            -DLIBEVENT_ROOT_DIR="$(brew --prefix libevent)"
+            -DOPENSSL_ROOT_DIR="$OPENSSL_DIR" \
+            -DOPENSSL_INCLUDE_DIR="$OPENSSL_DIR/include" \
+            -DOPENSSL_SSL_LIBRARY="$OPENSSL_DIR/lib/libssl.dylib" \
+            -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_DIR/lib/libcrypto.dylib" \
+            -DLIBEVENT_ROOT_DIR="$(brew --prefix libevent)" \
+            -DCMAKE_C_FLAGS="-I$OPENSSL_DIR/include" \
+            -DCMAKE_CXX_FLAGS="-I$OPENSSL_DIR/include"
 
       - name: Build
         run: cmake --build build -- -j$(sysctl -n hw.logicalcpu)
