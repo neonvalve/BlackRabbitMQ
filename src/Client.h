@@ -6,9 +6,10 @@
 #include <memory>
 #include <string>
 
+#include "Connection.h"
+
 namespace BlackRabbitMQ {
 
-class Connection;
 class Channel;
 struct Message;
 
