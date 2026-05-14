@@ -1,8 +1,6 @@
 #pragma once
 
-#include <amqpcpp/table.h>
-#include <amqpcpp/connection.h>
-#include <memory>
+#include <amqpcpp.h>
 #include <amqpcpp/libevent.h>
 #include <atomic>
 #include <string>
