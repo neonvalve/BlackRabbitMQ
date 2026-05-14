@@ -8,8 +8,6 @@ TcpTransportLinux::TcpTransportLinux(event_base* evbase)
 {
 }
 
-TcpTransportLinux::~TcpTransportLinux() = default;
-
 void TcpTransportLinux::onConnected(AMQP::TcpConnection* /*connection*/) {
     m_lost.store(false, std::memory_order_release);
 }

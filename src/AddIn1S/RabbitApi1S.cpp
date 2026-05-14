@@ -20,9 +20,7 @@ RabbitApi1S::RabbitApi1S()
 {
 }
 
-RabbitApi1S::~RabbitApi1S() {
-    clear();
-}
+RabbitApi1S::~RabbitApi1S() = default;
 
 // --- Проверка соединения ---
 
