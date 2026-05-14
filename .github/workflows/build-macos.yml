@@ -19,11 +19,10 @@ jobs:
 
       - name: Configure CMake
         run: |
+          export PKG_CONFIG_PATH="$(brew --prefix openssl)/lib/pkgconfig:$(brew --prefix libevent)/lib/pkgconfig"
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON \
-            -DOPENSSL_ROOT_DIR=$(brew --prefix openssl) \
-            -DLIBEVENT_ROOT_DIR=$(brew --prefix libevent)
-        env:
-          PKG_CONFIG_PATH: "$(brew --prefix openssl)/lib/pkgconfig:$(brew --prefix libevent)/lib/pkgconfig"
+            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)" \
+            -DLIBEVENT_ROOT_DIR="$(brew --prefix libevent)"
 
       - name: Build
         run: cmake --build build -- -j$(sysctl -n hw.logicalcpu)
@@ -59,11 +58,10 @@ jobs:
 
       - name: Configure CMake
         run: |
+          export PKG_CONFIG_PATH="$(brew --prefix openssl)/lib/pkgconfig:$(brew --prefix libevent)/lib/pkgconfig"
           cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DBUILD_INTEGRATION_TESTS=ON \
-            -DOPENSSL_ROOT_DIR=$(brew --prefix openssl) \
-            -DLIBEVENT_ROOT_DIR=$(brew --prefix libevent)
-        env:
-          PKG_CONFIG_PATH: "$(brew --prefix openssl)/lib/pkgconfig:$(brew --prefix libevent)/lib/pkgconfig"
+            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)" \
+            -DLIBEVENT_ROOT_DIR="$(brew --prefix libevent)"
 
       - name: Build
         run: cmake --build build -- -j$(sysctl -n hw.logicalcpu)

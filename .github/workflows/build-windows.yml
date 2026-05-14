@@ -1,8 +1,9 @@
 name: Build & Test (Windows)
 
+# Временно отключен: AMQP-CPP v4.1.4 несовместим с MSVC 2025.
+# Будет активирован после обновления до AMQP-CPP с поддержкой MSVC.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
   pull_request:
     branches: [main]
 
