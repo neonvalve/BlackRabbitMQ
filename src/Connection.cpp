@@ -2,6 +2,7 @@
 #include "EventLoop.h"
 #include "TcpTransport.h"
 
+#include <amqpcpp/libevent.h>
 #include <chrono>
 #include <thread>
 #include <mutex>

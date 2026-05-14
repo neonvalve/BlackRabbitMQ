@@ -15,7 +15,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          brew install libevent openssl
+          brew install libevent openssl pkg-config
 
       - name: Configure CMake
         run: |
@@ -39,7 +39,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          brew install libevent openssl
+          brew install libevent openssl pkg-config
 
       - name: Install and start RabbitMQ
         run: |

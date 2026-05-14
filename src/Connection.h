@@ -1,18 +1,18 @@
 #pragma once
 
 #include <amqpcpp.h>
-#include <amqpcpp/table.h>
-#include <amqpcpp/connection.h>
 #include <atomic>
 #include <memory>
 #include <string>
 #include <chrono>
 
-#if defined(__linux__) || defined(__APPLE__)
-#include <amqpcpp/libevent.h>
-#endif
-
 #include "TcpTransport.h"
+
+namespace AMQP {
+    class TcpConnection;
+    class Connection;
+    class Channel;
+}
 
 namespace BlackRabbitMQ {
 
