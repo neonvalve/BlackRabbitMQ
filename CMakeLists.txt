@@ -122,6 +122,7 @@ endif()
 # Compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(BlackRabbitMQ PRIVATE -Wall -Wextra -Wpedantic)
+    target_link_options(BlackRabbitMQ PRIVATE -v)
 elseif(MSVC)
     target_compile_options(BlackRabbitMQ PRIVATE /W4)
 endif()
