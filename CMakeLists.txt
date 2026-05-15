@@ -74,6 +74,7 @@ set(SOURCES
 )
 
 set(HEADERS
+    src/ITransport.h
     src/EventLoop.h
     src/TcpTransport.h
     src/Connection.h
@@ -94,12 +95,12 @@ set(HEADERS
 )
 
 if(PLATFORM_UNIX)
-    list(APPEND SOURCES src/Platform/TcpTransportLinux.cpp)
-    list(APPEND HEADERS src/Platform/TcpTransportLinux.h)
+    list(APPEND SOURCES src/Platform/LibeventTransport.cpp)
+    list(APPEND HEADERS src/Platform/LibeventTransport.h)
 elseif(PLATFORM_WINDOWS)
-    list(APPEND SOURCES src/Platform/TcpTransportWindows.cpp)
+    list(APPEND SOURCES src/Platform/PocoTransport.cpp)
 endif()
-list(APPEND HEADERS src/Platform/TcpTransportWindows.h)
+list(APPEND HEADERS src/Platform/PocoTransport.h)
 
 # Library target
 add_library(BlackRabbitMQ SHARED ${SOURCES} ${HEADERS})

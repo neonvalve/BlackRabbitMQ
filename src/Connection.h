@@ -6,21 +6,13 @@
 #include <string>
 #include <chrono>
 
-#include "TcpTransport.h"
-
-namespace AMQP {
-    class TcpConnection;
-    class Connection;
-    class Channel;
-}
+#include "ITransport.h"
 
 namespace BlackRabbitMQ {
 
-class EventLoop;
-
 // RAII-обёртка над AMQP-соединением с RabbitMQ.
-// Владеет: TcpTransport, EventLoop (поток), AMQP::TcpConnection/Connection.
-// Поддерживает heartbeat через onNegotiate.
+// Делегирует платформенную работу ITransport (LibeventTransport / PocoTransport).
+// Ни одного #ifdef — весь платформенный код за интерфейсом.
 class Connection {
 public:
     explicit Connection(const AMQP::Address& address, int timeoutSec = 30);
@@ -29,46 +21,20 @@ public:
     Connection(const Connection&) = delete;
     Connection& operator=(const Connection&) = delete;
 
-    // Установить соединение. Бросает std::runtime_error при ошибке.
     void connect();
-
-    // Разорвать соединение. Безопасен для повторного вызова.
     void disconnect();
-
-    // Переподключиться с теми же параметрами.
     bool reconnect();
 
-    // Состояние соединения.
-    bool isConnected() const noexcept { return m_connected.load(std::memory_order_acquire); }
+    bool isConnected() const noexcept { return m_transport->isConnected(); }
+    const std::string& lastError() const noexcept { return m_transport->error(); }
 
     // Создать новый канал. Владелец — вызывающий.
-    // Linux: TcpChannel (наследник AMQP::Channel)
-    // Windows: AMQP::Channel
     std::unique_ptr<AMQP::Channel> createChannel();
 
-    // Доступ к event loop (для продвинутых сценариев).
-    EventLoop* eventLoop() const noexcept { return m_eventLoop.get(); }
-
-    // Последняя ошибка.
-    const std::string& lastError() const noexcept { return m_error; }
-
 private:
-    void waitForReady();
-
     AMQP::Address m_address;
     int m_timeoutSec;
-
-    std::unique_ptr<TcpTransport> m_transport;
-    std::unique_ptr<EventLoop> m_eventLoop;
-
-#if defined(__linux__) || defined(__APPLE__)
-    std::unique_ptr<AMQP::TcpConnection> m_amqpConn;
-#elif defined(_WIN32) || defined(_WIN64)
-    std::unique_ptr<AMQP::Connection> m_amqpConn;
-#endif
-
-    std::atomic<bool> m_connected;
-    std::string m_error;
+    std::unique_ptr<ITransport> m_transport;
 };
 
 } // namespace BlackRabbitMQ
