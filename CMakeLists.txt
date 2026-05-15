@@ -57,7 +57,7 @@ if(PLATFORM_UNIX)
     pkg_check_modules(LIBEVENT REQUIRED libevent)
     pkg_check_modules(OPENSSL REQUIRED openssl)
 elseif(PLATFORM_WINDOWS)
-    find_package(Poco REQUIRED Foundation Net)
+    find_package(Poco REQUIRED Foundation Net NetSSL Crypto Util)
     find_package(OpenSSL REQUIRED)
 endif()
 
@@ -123,6 +123,9 @@ elseif(PLATFORM_WINDOWS)
     target_link_libraries(BlackRabbitMQ PUBLIC
         Poco::Foundation
         Poco::Net
+        Poco::NetSSL
+        Poco::Crypto
+        Poco::Util
         OpenSSL::SSL
         OpenSSL::Crypto
     )
