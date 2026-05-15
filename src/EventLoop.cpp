@@ -1,10 +1,14 @@
 #include "EventLoop.h"
 
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <thread>
 #include <stdexcept>
 #include <event2/event.h>
+#endif
 
 namespace BlackRabbitMQ {
+
+#if !defined(_WIN32) && !defined(_WIN64)
 
 EventLoop::EventLoop()
     : m_base(nullptr)
@@ -45,9 +49,15 @@ void EventLoop::stop() {
 }
 
 void EventLoop::runLoop(EventLoop* self) {
-    // Блокирующий режим: поток спит на poll(), 0% CPU в простое.
-    // event_base_loopbreak() прерывает цикл из другого потока.
     event_base_loop(self->m_base, 0);
 }
+
+#else
+// Windows: EventLoop не используется (TcpTransportWindows управляет своим потоком)
+EventLoop::EventLoop() {}
+EventLoop::~EventLoop() {}
+void EventLoop::run() {}
+void EventLoop::stop() {}
+#endif
 
 } // namespace BlackRabbitMQ

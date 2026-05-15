@@ -2,7 +2,9 @@
 #include "EventLoop.h"
 #include "TcpTransport.h"
 
+#if defined(__linux__) || defined(__APPLE__)
 #include <amqpcpp/libevent.h>
+#endif
 #include <chrono>
 #include <thread>
 #include <mutex>
