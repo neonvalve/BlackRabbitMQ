@@ -228,3 +228,46 @@ TEST_F(IntegrationTest, Reconnect) {
     client.disconnect();
     EXPECT_FALSE(client.isConnected());
 }
+
+// Полный пользовательский сценарий: Connect → Queue → Publish → Consume → Ack
+TEST_F(IntegrationTest, FullEndToEndDemo) {
+    client.connect(rabbitHost(), rabbitPort(), "guest", "guest", "/", false, 5);
+
+    client.declareExchange("demo_ex", AMQP::ExchangeType::direct, false, false, true);
+    client.declareQueue("demo_queue", false, false, true, true);
+    client.bindQueue("demo_ex", "demo_queue", "demo.key");
+
+    // Публикация с UTF-8 текстом
+    std::string body = u8"Привет из BlackRabbitMQ! Сообщение №1";
+    client.publish("demo_ex", "demo.key", body);
+
+    // Чтение
+    bool received = false;
+    std::string receivedBody;
+    uint64_t receivedTag = 0;
+
+    auto channel = client.createChannel();
+    Consumer consumer;
+    consumer.start(
+        std::move(channel), "demo_queue", "demo-consumer",
+        false, 1, {},
+        [&](const Message& msg) {
+            received = true;
+            receivedBody = msg.body;
+            receivedTag = msg.deliveryTag;
+        },
+        nullptr);
+
+    for (int i = 0; i < 30 && !received; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    EXPECT_TRUE(received);
+    EXPECT_EQ(receivedBody, body);
+    EXPECT_GT(receivedTag, 0ULL);
+
+    consumer.ack(receivedTag);
+    consumer.cancel();
+    client.deleteQueue("demo_queue");
+    client.deleteExchange("demo_ex");
+    client.disconnect();
+}
