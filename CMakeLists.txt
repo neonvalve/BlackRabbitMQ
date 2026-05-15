@@ -35,11 +35,11 @@ FetchContent_MakeAvailable(json)
 # AMQP-CPP
 # MSVC: message.h использует size_t без <cstddef>
 if(PLATFORM_WINDOWS)
-    set(AMQP_PATCH_CMD sed -i.bak "1i\\
+    set(AMQP_PATCH_CMD sed -i.bak "s/VERSION 3\\.[0-9]/VERSION 3.16/" CMakeLists.txt && sed -i.bak "1i\\
 #include <cstddef>\\
 #include <stdexcept>" include/amqpcpp/message.h)
 else()
-    set(AMQP_PATCH_CMD "")
+    set(AMQP_PATCH_CMD sed -i.bak "s/VERSION 3\\.[0-9]/VERSION 3.16/" CMakeLists.txt)
 endif()
 
 FetchContent_Declare(amqpcpp
