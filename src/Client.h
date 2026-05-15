@@ -7,10 +7,10 @@
 #include <string>
 
 #include "Connection.h"
+#include "Channel.h"
 
 namespace BlackRabbitMQ {
 
-class Channel;
 struct Message;
 
 // Главный фасад для работы с RabbitMQ.
