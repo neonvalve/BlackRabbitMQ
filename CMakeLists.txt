@@ -33,9 +33,19 @@ FetchContent_Declare(json
 FetchContent_MakeAvailable(json)
 
 # AMQP-CPP
+# MSVC: message.h использует size_t без <cstddef>
+if(PLATFORM_WINDOWS)
+    set(AMQP_PATCH_CMD sed -i.bak "1i\\
+#include <cstddef>\\
+#include <stdexcept>" include/amqpcpp/message.h)
+else()
+    set(AMQP_PATCH_CMD "")
+endif()
+
 FetchContent_Declare(amqpcpp
     GIT_REPOSITORY https://github.com/CopernicaMarketingSoftware/AMQP-CPP.git
     GIT_TAG v4.3.19
+    PATCH_COMMAND ${AMQP_PATCH_CMD}
 )
 set(AMQP-CPP_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 if(PLATFORM_UNIX)
