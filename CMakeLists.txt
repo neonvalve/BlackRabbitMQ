@@ -119,7 +119,7 @@ if(PLATFORM_UNIX)
         ${OPENSSL_INCLUDE_DIRS}
     )
 elseif(PLATFORM_WINDOWS)
-    target_compile_definitions(BlackRabbitMQ PRIVATE NOMINMAX)
+    target_compile_definitions(BlackRabbitMQ PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _WINSOCKAPI_)
     target_link_libraries(BlackRabbitMQ PUBLIC
         Poco::Foundation
         Poco::Net
