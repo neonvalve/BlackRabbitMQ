@@ -69,6 +69,18 @@ void Consumer::start(
     m_active.store(true, std::memory_order_release);
 }
 
+void Consumer::ack(uint64_t deliveryTag) {
+    if (m_channel && m_channel->usable()) {
+        m_channel->ack(deliveryTag);
+    }
+}
+
+void Consumer::reject(uint64_t deliveryTag, bool requeue) {
+    if (m_channel && m_channel->usable()) {
+        m_channel->reject(deliveryTag, requeue);
+    }
+}
+
 void Consumer::cancel() {
     if (!m_active.load(std::memory_order_acquire)) {
         return;

@@ -48,6 +48,10 @@ public:
     const std::string& tag() const noexcept { return m_tag; }
     const std::string& queueName() const noexcept { return m_queueName; }
 
+    // Ack/Reject через канал потребителя (обязательно тот же канал!)
+    void ack(uint64_t deliveryTag);
+    void reject(uint64_t deliveryTag, bool requeue = false);
+
 private:
     std::unique_ptr<Channel> m_channel;
     std::string m_queueName;

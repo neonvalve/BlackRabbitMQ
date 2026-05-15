@@ -144,14 +144,12 @@ TEST_F(IntegrationTest, RejectWithRequeue) {
         false,
         1,
         {},
-        [&](const Message& msg) {
+        [&consumer, &receivedCount](const Message& msg) {
             receivedCount++;
             if (receivedCount == 1) {
-                // Первый раз: reject с requeue
-                client.reject(msg.deliveryTag, true);
+                consumer.reject(msg.deliveryTag, true);
             } else {
-                // Второй раз: ack
-                client.ack(msg.deliveryTag);
+                consumer.ack(msg.deliveryTag);
             }
         },
         nullptr

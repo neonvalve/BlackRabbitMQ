@@ -40,16 +40,22 @@ void EventLoop::stop() {
     if (!m_running.load(std::memory_order_acquire)) {
         return;
     }
+    // Сначала флаг, потом loopbreak — чтобы поток вышел из while
+    m_running.store(false, std::memory_order_release);
     event_base_loopbreak(m_base);
     if (m_thread && m_thread->joinable()) {
         m_thread->join();
     }
     m_thread.reset(nullptr);
-    m_running.store(false, std::memory_order_release);
 }
 
 void EventLoop::runLoop(EventLoop* self) {
-    event_base_loop(self->m_base, 0);
+    // Неблокирующий цикл (как в upstream PinkRabbitMQ).
+    // EVLOOP_NONBLOCK обрабатывает события и возвращается.
+    // Выход по m_running = false из EventLoop::stop().
+    while (self->m_running.load(std::memory_order_acquire)) {
+        event_base_loop(self->m_base, EVLOOP_NONBLOCK);
+    }
 }
 
 #else

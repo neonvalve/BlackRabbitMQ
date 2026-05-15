@@ -246,19 +246,22 @@ void Client::stopConsumer() {
 }
 
 // --- Ack / Reject ---
+// Ack и Reject должны выполняться на канале consume
+// (том же, через который получено сообщение).
+// Если consume не активен, используем publish-канал.
 
 void Client::ack(uint64_t deliveryTag) {
-    if (!m_channel || !m_channel->usable()) {
-        throw std::runtime_error("Channel not available for ack");
-    }
-    m_channel->ack(deliveryTag);
+    Channel* ch = m_consumeChannel.get();
+    if (!ch || !ch->usable()) ch = m_channel.get();
+    if (!ch || !ch->usable()) throw std::runtime_error("Channel not available for ack");
+    ch->ack(deliveryTag);
 }
 
 void Client::reject(uint64_t deliveryTag, bool requeue) {
-    if (!m_channel || !m_channel->usable()) {
-        throw std::runtime_error("Channel not available for reject");
-    }
-    m_channel->reject(deliveryTag, requeue);
+    Channel* ch = m_consumeChannel.get();
+    if (!ch || !ch->usable()) ch = m_channel.get();
+    if (!ch || !ch->usable()) throw std::runtime_error("Channel not available for reject");
+    ch->reject(deliveryTag, requeue);
 }
 
 } // namespace BlackRabbitMQ
