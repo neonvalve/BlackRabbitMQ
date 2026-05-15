@@ -35,9 +35,7 @@ FetchContent_MakeAvailable(json)
 # AMQP-CPP
 # MSVC: message.h использует size_t без <cstddef>
 if(PLATFORM_WINDOWS)
-    set(AMQP_PATCH_CMD sed -i.bak "s/VERSION 3\\.[0-9]/VERSION 3.16/" CMakeLists.txt && sed -i.bak "1i\\
-#include <cstddef>\\
-#include <stdexcept>" include/amqpcpp/message.h)
+    set(AMQP_PATCH_CMD sed -i.bak "s/VERSION 3\\.[0-9]/VERSION 3.16/" CMakeLists.txt && sed -i.bak "s/std::numeric_limits<size_t>::max()/(std::numeric_limits<size_t>::max)()/g" include/amqpcpp/message.h && sed -i.bak "s/std::min(/(std::min)(/g" include/amqpcpp/message.h)
 else()
     set(AMQP_PATCH_CMD sed -i.bak "s/VERSION 3\\.[0-9]/VERSION 3.16/" CMakeLists.txt)
 endif()
@@ -121,6 +119,7 @@ if(PLATFORM_UNIX)
         ${OPENSSL_INCLUDE_DIRS}
     )
 elseif(PLATFORM_WINDOWS)
+    target_compile_definitions(BlackRabbitMQ PRIVATE NOMINMAX)
     target_link_libraries(BlackRabbitMQ PUBLIC
         Poco::Foundation
         Poco::Net
