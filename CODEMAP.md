@@ -20,8 +20,9 @@ BlackRabbitMQ/
 ├── src/                           — исходный код библиотеки
 │   ├── AddInNative.cpp            — точка входа DLL (GetClassObject/DestroyObject)
 │   ├── EventLoop.h/.cpp           — RAII event loop (libevent, блокирующий)
-│   ├── TcpTransport.h             — платформенный селектор транспорта
-│   ├── Connection.h/.cpp          — RAII соединение с RabbitMQ
+│   ├── ITransport.h               — интерфейс транспорта (ООП)
+│   ├── TcpTransport.h             — фабрика транспорта (платформенный #ifdef)
+│   ├── Connection.h/.cpp          — RAII соединение (0 #ifdef, через ITransport*)
 │   ├── Channel.h/.cpp             — синхронная обёртка над AMQP::TcpChannel
 │   ├── Message.h                  — value-объект сообщения (бинаро-безопасный)
 │   ├── Consumer.h/.cpp            — RAII потребитель с callback'ами
@@ -34,8 +35,8 @@ BlackRabbitMQ/
 │   │   ├── RabbitMQClientNative.h/.cpp — IComponentBase (таблицы методов/свойств)
 │   │   └── sdk/                   — заголовки 1С SDK (не изменяются)
 │   └── Platform/
-│       ├── TcpTransportLinux.h/.cpp   — Linux: AMQP::LibEventHandler
-│       └── TcpTransportWindows.h/.cpp — Windows: AMQP::ConnectionHandler (POCO)
+│       ├── LibeventTransport.h/.cpp   — Linux/macOS: ITransport + libevent
+│       └── PocoTransport.h/.cpp       — Windows: ITransport + POCO
 │
 ├── tests/                         — юнит-тесты
 │   ├── CMakeLists.txt             — Google Test (FetchContent)

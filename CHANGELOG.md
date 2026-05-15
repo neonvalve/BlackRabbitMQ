@@ -5,6 +5,21 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 версии по [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-05-15
+
+### Добавлено
+- ITransport — абстрактный интерфейс транспорта (ООП-рефакторинг)
+- LibeventTransport — реализация для Linux/macOS (libevent)
+- PocoTransport — реализация для Windows (POCO)
+- Интеграционные тесты с реальным RabbitMQ (7 тестов)
+- onCancelled — callback отмены потребителя (AMQP-CPP v4.3.19)
+- Сборка на macOS (Clang)
+
+### Исправлено
+- EventLoop deadlock: m_running=false перед loopbreak
+- Ack/Reject через канал потребителя (было на publish-канале)
+- AMQP-CPP v4.3.19 на всех платформах
+
 ## [0.1.0] — 2026-05-13
 
 ### Добавлено
