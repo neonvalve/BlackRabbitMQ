@@ -2,7 +2,7 @@
 #include "AddIn1S/sdk/ComponentBase.h"
 
 #if defined(__linux__)
-#define EXPORT __attribute__((visibility("default")))
+#define EXPORT __attribute__ ((visibility ("default")))
 #else
 #define EXPORT
 #endif
