@@ -115,6 +115,8 @@ private:
     std::string m_consumerError;
     bool m_useExternalEvent = false;
 
+    // Свойства для следующей публикации (устанавливаются через setMsgProp)
+    MessageProperties m_outgoingProps;
     // Последнее полученное сообщение
     Message m_lastMessage;
 };

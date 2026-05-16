@@ -152,8 +152,18 @@ void RabbitApi1S::basicPublishImpl(CallContext& ctx) {
         envelope.setDeliveryMode(2);
     }
 
-    // Установить свойства сообщения (из setMsgProp)
-    // Они хранятся отдельно, применяются здесь.
+    // Применить свойства, установленные через setMsgProp
+    if (!m_outgoingProps.correlationId.empty())   envelope.setCorrelationID(m_outgoingProps.correlationId);
+    if (!m_outgoingProps.messageId.empty())       envelope.setMessageID(m_outgoingProps.messageId);
+    if (!m_outgoingProps.typeName.empty())        envelope.setTypeName(m_outgoingProps.typeName);
+    if (!m_outgoingProps.appId.empty())           envelope.setAppID(m_outgoingProps.appId);
+    if (!m_outgoingProps.contentEncoding.empty()) envelope.setContentEncoding(m_outgoingProps.contentEncoding);
+    if (!m_outgoingProps.contentType.empty())     envelope.setContentType(m_outgoingProps.contentType);
+    if (!m_outgoingProps.userId.empty())          envelope.setUserID(m_outgoingProps.userId);
+    if (!m_outgoingProps.clusterId.empty())       envelope.setClusterID(m_outgoingProps.clusterId);
+    if (!m_outgoingProps.expiration.empty())      envelope.setExpiration(m_outgoingProps.expiration);
+    if (!m_outgoingProps.replyTo.empty())         envelope.setReplyTo(m_outgoingProps.replyTo);
+    if (m_lastMessage.priority != 0)              envelope.setPriority(m_lastMessage.priority);
 
     AMQP::Table headers = headersFromJson(propsJson);
     if (headers.keys().size() > 0) {
@@ -161,6 +171,7 @@ void RabbitApi1S::basicPublishImpl(CallContext& ctx) {
     }
 
     m_client->publish(exchange, routingKey, body);
+    m_outgoingProps = MessageProperties{};
 }
 
 // --- Consume (legacy polling) ---
@@ -348,12 +359,37 @@ void RabbitApi1S::getPriorityImpl(CallContext& ctx) {
 }
 
 void RabbitApi1S::setMsgPropImpl(long propNum, CallContext& ctx) {
-    // TODO: хранить свойства для следующего publish
-    // propNum: 1=CorrelationId, 2=Type, 3=MessageId, ...
+    std::string value = ctx.stringParamUtf8();
+    switch (propNum) {
+        case 1:  m_outgoingProps.correlationId = value;    break;
+        case 2:  m_outgoingProps.typeName = value;         break;
+        case 3:  m_outgoingProps.messageId = value;        break;
+        case 4:  m_outgoingProps.appId = value;            break;
+        case 5:  m_outgoingProps.contentEncoding = value;  break;
+        case 6:  m_outgoingProps.contentType = value;      break;
+        case 7:  m_outgoingProps.userId = value;           break;
+        case 8:  m_outgoingProps.clusterId = value;        break;
+        case 9:  m_outgoingProps.expiration = value;       break;
+        case 10: m_outgoingProps.replyTo = value;          break;
+    }
 }
 
 void RabbitApi1S::getMsgPropImpl(long propNum, CallContext& ctx) {
-    // TODO: вернуть свойство последнего сообщения по номеру
+    const auto& props = m_lastMessage.props;
+    std::string value;
+    switch (propNum) {
+        case 1:  value = props.correlationId;    break;
+        case 2:  value = props.typeName;         break;
+        case 3:  value = props.messageId;        break;
+        case 4:  value = props.appId;            break;
+        case 5:  value = props.contentEncoding;  break;
+        case 6:  value = props.contentType;      break;
+        case 7:  value = props.userId;           break;
+        case 8:  value = props.clusterId;        break;
+        case 9:  value = props.expiration;       break;
+        case 10: value = props.replyTo;          break;
+    }
+    ctx.setStringOrEmptyResult(m_converter.from_bytes(value));
 }
 
 // --- Helpers ---
