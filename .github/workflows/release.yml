@@ -166,6 +166,16 @@ jobs:
             --component Windows:i386:artifacts/windows-i386/BlackRabbitMQ.dll
           unzip -l "dist/BlackRabbitMQ-${{ needs.version-check.outputs.version }}.zip"
 
+      # Пакет без нужного бинарника платформа подключит, а работать он не будет
+      # именно у того клиента, чью разрядность забыли. Проверяем состав явно.
+      - name: Проверить состав пакета
+        run: |
+          zip="dist/BlackRabbitMQ-${{ needs.version-check.outputs.version }}.zip"
+          for entry in MANIFEST.XML libBlackRabbitMQ.so BlackRabbitMQ-x86_64.dll BlackRabbitMQ-i386.dll; do
+            unzip -l "$zip" | grep -q "$entry" || { echo "В пакете нет $entry" >&2; exit 1; }
+          done
+          echo "Все бинарники на месте"
+
       - uses: actions/upload-artifact@v4
         with:
           name: addin-1c
@@ -176,9 +186,35 @@ jobs:
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version-check.outputs.version }}
         run: |
+          cat > notes.md <<'NOTES'
+          Внешняя Native API компонента для работы с RabbitMQ из 1С:Предприятие 8.3.
+
+          **В пакете** (один ZIP, внутри `MANIFEST.XML`):
+
+          | Платформа | Файл |
+          |---|---|
+          | Windows x86_64 | `BlackRabbitMQ-x86_64.dll` |
+          | Windows i386 | `BlackRabbitMQ-i386.dll` |
+          | Linux x86_64 | `libBlackRabbitMQ.so` |
+
+          Windows-сборки статически линкуют CRT и рассчитаны на Windows 7 /
+          Server 2008 R2 и новее. Linux-сборка собрана на Ubuntu 24.04.
+
+          **Установка.** Добавьте ZIP в конфигурацию как общий макет с видом
+          «Двоичные данные», затем:
+
+          ```1c
+          ПодключитьВнешнююКомпоненту("ОбщийМакет.BlackRabbitMQ", "BRMQ", ТипВнешнейКомпоненты.Native);
+          Клиент = Новый("AddIn.BRMQ.BlackRabbitMQ");
+          ```
+
+          **Лицензия.** Некоммерческое использование — PolyForm Noncommercial 1.0.0.
+          Любое коммерческое использование — по платной лицензии: jsxlabor@gmail.com
+          NOTES
           gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --notes "Пакет внешней компоненты для 1С: Linux x86_64, Windows x86_64 и i386." \
+            --title "BlackRabbitMQ $VERSION" \
+            --notes-file notes.md \
             dist/*.zip \
             || gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber

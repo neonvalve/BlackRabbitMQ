@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(BlackRabbitMQ
-    VERSION 0.3.0
+    VERSION 0.0.1
     DESCRIPTION "Компонента RabbitMQ для 1С:Предприятие: C++17/20, RAII, событийная модель"
     LANGUAGES CXX
 )
@@ -177,7 +177,13 @@ target_compile_definitions(brmq_core PRIVATE BLACKRABBITMQ_VERSION="${PROJECT_VE
 if(PLATFORM_WINDOWS)
     # PUBLIC: без NOMINMAX заголовки amqpcpp ломаются о макросы windows.h,
     # а их включают и тесты.
-    target_compile_definitions(brmq_core PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN _WINSOCKAPI_)
+    # Минимальная целевая версия Windows — 7 / Server 2008 R2. Без явного
+    # значения заголовки берут версию из установленного SDK, и в DLL попадают
+    # импорты, которых на старых системах нет: клиент 1С такую компоненту
+    # просто не загрузит, причём без внятной диагностики.
+    target_compile_definitions(brmq_core PUBLIC
+        NOMINMAX WIN32_LEAN_AND_MEAN _WINSOCKAPI_
+        _WIN32_WINNT=0x0601 WINVER=0x0601)
 endif()
 
 # Compiler flags
