@@ -45,7 +45,12 @@ public:
     // Учитывает реальное состояние транспорта: соединение могло оборваться
     // без участия 1С (перезапуск брокера, сеть).
     bool isConnected() const;
-    const std::string& lastError() const noexcept { return m_error; }
+    // Возвращает копией: при обрыве причину знает транспорт, а не фасад —
+    // без этого сторож переподключения писал в журнал пустую причину.
+    std::string lastError() const {
+        if (!m_error.empty() || !m_connection) return m_error;
+        return m_connection->lastError();
+    }
 
     // --- Exchange ---
 

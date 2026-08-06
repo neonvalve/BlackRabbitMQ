@@ -2,6 +2,7 @@
 #include "Connection.h"
 #include "Channel.h"
 #include "Message.h"
+#include "Logger.h"
 
 #include <amqpcpp.h>
 #include <stdexcept>
@@ -33,13 +34,19 @@ void Client::connect(
 
     m_connection.reset(new Connection(address, timeoutSec, tls, heartbeatSec));
 
+    BRMQ_LOG_INFO("Connect: " + std::string(ssl ? "amqps://" : "amqp://") + user + "@"
+                  + host + ":" + std::to_string(port) + vhost
+                  + ", timeout " + std::to_string(m_timeoutSec) + " s");
+
     try {
         m_connection->connect();
         m_connected.store(true, std::memory_order_release);
+        BRMQ_LOG_INFO("Connected to " + host + ":" + std::to_string(port));
     } catch (const std::exception& e) {
         m_error = e.what();
         m_connection.reset(nullptr);
         m_connected.store(false, std::memory_order_release);
+        BRMQ_LOG_ERROR("Connect failed: " + m_error);
         throw;
     }
 }
@@ -73,13 +80,16 @@ bool Client::reconnect() {
             m_error = m_connection->lastError();
             if (m_error.empty()) m_error = "Reconnect failed";
             m_connected.store(false, std::memory_order_release);
+            BRMQ_LOG_ERROR("Reconnect failed: " + m_error);
             return false;
         }
         m_connected.store(true, std::memory_order_release);
+        BRMQ_LOG_INFO("Reconnected");
         return true;
     } catch (const std::exception& e) {
         m_error = e.what();
         m_connected.store(false, std::memory_order_release);
+        BRMQ_LOG_ERROR("Reconnect failed: " + m_error);
         return false;
     }
 }

@@ -2,6 +2,7 @@
 
 #include "ITransport.h"
 #include "EventLoop.h"
+#include "Logger.h"
 
 #include <amqpcpp.h>
 #include <amqpcpp/libevent.h>
@@ -51,6 +52,7 @@ struct LibeventHandler : AMQP::LibEventHandler {
     }
 
     void onLost(AMQP::TcpConnection*) override {
+        BRMQ_LOG_WARN("Connection lost");
         std::lock_guard<std::mutex> lock(mutex);
         lost.store(true, std::memory_order_release);
         finished = true;
@@ -59,6 +61,7 @@ struct LibeventHandler : AMQP::LibEventHandler {
     }
 
     void onError(AMQP::TcpConnection*, const char* msg) override {
+        BRMQ_LOG_ERROR(std::string("AMQP error: ") + (msg ? msg : "unknown"));
         std::lock_guard<std::mutex> lock(mutex);
         if (msg) error = msg;
         finished = true;

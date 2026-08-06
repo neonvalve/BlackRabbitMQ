@@ -4,6 +4,7 @@
 #include "CallContext.h"
 #include "Message.h"
 #include "TlsOptions.h"
+#include "Logger.h"
 
 #include <amqpcpp/table.h>
 
@@ -125,6 +126,8 @@ public:
     // сертификата брокера. Читаются в момент Connect.
     void setTlsPropImpl(long propNum, CallContext& ctx);
     void getTlsPropImpl(long propNum, CallContext& ctx);
+    // Пересобрать журнал после смены LogFile или LogLevel.
+    void applyLogSettings();
 
 private:
     // Параметры активного потребителя: нужны, чтобы поднять его после обрыва.
@@ -177,6 +180,11 @@ private:
     std::atomic<bool> m_watchdogStop{false};
     std::mutex m_watchdogMutex;
     std::condition_variable m_watchdogCv;
+
+    // Журнал: путь и уровень приходят из 1С отдельными свойствами,
+    // поэтому храним их и пересобираем настройку при изменении любого.
+    std::string m_logFile;
+    std::string m_logLevel;
 
     // Очередь сообщений для polling-совместимости (BasicConsumeMessage)
     std::queue<Message> m_messageQueue;

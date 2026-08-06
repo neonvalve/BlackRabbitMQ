@@ -46,10 +46,10 @@ public:
     void stop();
 
     // --- ITaskRunner ---
-    bool inLoopThread() const noexcept override {
-        return m_running.load(std::memory_order_acquire)
-            && std::this_thread::get_id() == m_loopThreadId;
-    }
+    // Определение в .cpp: принадлежность потоку определяется thread_local
+    // меткой, которую ставит сам цикл. Сравнение с сохранённым thread::id
+    // было гонкой — поле пишет поток цикла, а читает поток 1С.
+    bool inLoopThread() const noexcept override;
     void post(std::function<void()> task) override;
 
     // Задача, исполняемая каждый тик в потоке цикла (heartbeat и подобное).
@@ -76,7 +76,6 @@ private:
     int m_wakeFd[2];        // [0] — чтение в цикле, [1] — запись из post()
     std::unique_ptr<std::thread> m_thread;
     std::atomic<bool> m_running;
-    std::thread::id m_loopThreadId;
 
     std::function<void()> m_onTick;
 

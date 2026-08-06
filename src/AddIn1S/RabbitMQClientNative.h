@@ -49,6 +49,10 @@ public:
         ePropReconnectDelayMs,
         ePropReconnectMaxDelayMs,
         ePropReconnectCount,        // только чтение: сколько раз подняли связь
+        // Журнал компоненты: путь к файлу и уровень
+        // ("off", "error", "warn", "info", "debug").
+        ePropLogFile,
+        ePropLogLevel,
         ePropLast
     };
 

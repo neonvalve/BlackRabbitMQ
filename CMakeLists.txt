@@ -106,6 +106,7 @@ endif()
 
 # Source files
 set(SOURCES
+    src/Logger.cpp
     src/EventLoop.cpp
     src/Connection.cpp
     src/Channel.cpp

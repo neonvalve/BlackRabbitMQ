@@ -1,4 +1,5 @@
 #include "Platform/PocoTransport.h"
+#include "Logger.h"
 
 #include <Poco/Net/StreamSocket.h>
 #include <Poco/Net/DatagramSocket.h>
@@ -180,9 +181,11 @@ void PocoTransport::verifyPeerCertificate() {
         throw std::runtime_error("TLS certificate check failed: " + e.displayText());
     }
     if (!matches) {
+        BRMQ_LOG_ERROR("TLS: certificate subject " + subject + " does not match host " + m_host);
         throw std::runtime_error("TLS certificate does not match host " + m_host
                                  + " (certificate subject: " + subject + ")");
     }
+    BRMQ_LOG_INFO("TLS: peer certificate verified, subject " + subject);
 }
 
 void PocoTransport::waitForReady(int timeoutSec) {
@@ -417,7 +420,10 @@ void PocoTransport::onReady(AMQP::Connection*) {
     m_closed.store(false, std::memory_order_release);
 }
 void PocoTransport::onError(AMQP::Connection*, const char* message) {
-    if (message) setError(message);
+    if (message) {
+        BRMQ_LOG_ERROR(std::string("AMQP error: ") + message);
+        setError(message);
+    }
 }
 void PocoTransport::onClosed(AMQP::Connection*) {
     m_closed.store(true, std::memory_order_release);
@@ -437,6 +443,8 @@ uint16_t PocoTransport::onNegotiate(AMQP::Connection*, uint16_t interval) {
     }
     m_heartbeatSec = chosen;
     m_lastHeartbeatSent = std::chrono::steady_clock::now();
+    BRMQ_LOG_INFO("Heartbeat negotiated: broker offered " + std::to_string(interval)
+                  + " s, using " + std::to_string(chosen) + " s");
     return chosen;
 }
 
@@ -453,8 +461,19 @@ void PocoTransport::sendHeartbeatIfDue() {
 }
 
 void PocoTransport::markClosedByPeer(const std::string& reason) {
+    // Сообщаем один раз: FIN приходит на каждой итерации, а обрыв — событие.
+    if (m_closed.load(std::memory_order_acquire)) return;
+
+    BRMQ_LOG_WARN("Connection dropped by broker: " + reason);
     setError(reason);
     m_closed.store(true, std::memory_order_release);
+
+    // Закрытый сокет всегда «готов к чтению»: пока он в PollSet, poll
+    // возвращается мгновенно, и цикл крутится без сна, сжигая ядро — до
+    // переподключения, а без автопереподключения бесконечно.
+    if (m_pollSet && m_socket) {
+        try { m_pollSet->remove(*m_socket); } catch (...) {}
+    }
     if (m_amqpConn) m_amqpConn->close();
 }
 

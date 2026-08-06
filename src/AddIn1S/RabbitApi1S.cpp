@@ -7,6 +7,7 @@
 #include "Consumer.h"
 #include "Message.h"
 #include "Channel.h"
+#include "Logger.h"
 
 #include <nlohmann/json.hpp>
 
@@ -78,6 +79,20 @@ void RabbitApi1S::connectImpl(CallContext& ctx) {
     startWatchdog();
 }
 
+// --- Журнал ---
+
+void RabbitApi1S::applyLogSettings() {
+    // Уровень по умолчанию — info: если путь задали, а уровень нет, писать
+    // хочется хотя бы подключения и обрывы, ради которых журнал и включают.
+    const LogLevel level = m_logLevel.empty() ? LogLevel::Info
+                                              : Logger::levelFromString(m_logLevel);
+    Logger::instance().configure(m_logFile, level);
+    if (!m_logFile.empty() && level != LogLevel::Off) {
+        BRMQ_LOG_INFO("BlackRabbitMQ " + m_version + ": log level "
+                      + Logger::levelToString(level));
+    }
+}
+
 // --- Настройки TLS ---
 
 void RabbitApi1S::setTlsPropImpl(long propNum, CallContext& ctx) {
@@ -109,6 +124,14 @@ void RabbitApi1S::setTlsPropImpl(long propNum, CallContext& ctx) {
             m_reconnectMaxDelayMs = value < m_reconnectDelayMs ? m_reconnectDelayMs : value;
             break;
         }
+        case RabbitMQClientNative::ePropLogFile:
+            m_logFile = ctx.stringParamUtf8();
+            applyLogSettings();
+            break;
+        case RabbitMQClientNative::ePropLogLevel:
+            m_logLevel = ctx.stringParamUtf8();
+            applyLogSettings();
+            break;
         default:
             break;
     }
@@ -139,6 +162,13 @@ void RabbitApi1S::getTlsPropImpl(long propNum, CallContext& ctx) {
             break;
         case RabbitMQClientNative::ePropReconnectCount:
             ctx.setIntResult(m_reconnectCount.load(std::memory_order_relaxed));
+            break;
+        case RabbitMQClientNative::ePropLogFile:
+            ctx.setStringOrEmptyResult(m_converter.from_bytes(m_logFile));
+            break;
+        case RabbitMQClientNative::ePropLogLevel:
+            ctx.setStringOrEmptyResult(m_converter.from_bytes(
+                Logger::levelToString(Logger::instance().level())));
             break;
         default:
             ctx.setEmptyResult();
@@ -296,6 +326,10 @@ void RabbitApi1S::basicConsumeImpl(CallContext& ctx) {
 
 // Общий путь для BasicConsume и восстановления после Reconnect.
 void RabbitApi1S::startConsumer(const ConsumeParams& params) {
+    BRMQ_LOG_INFO("BasicConsume: queue '" + params.queue + "', prefetch "
+                  + std::to_string(params.prefetch)
+                  + (params.noConfirm ? ", noAck" : ", manual ack")
+                  + (m_useExternalEvent ? ", external events" : ", polling"));
     m_consumer.reset(new Consumer());
 
     // Канал потребителя: ack/reject пойдут именно по нему.
@@ -339,6 +373,11 @@ void RabbitApi1S::startConsumer(const ConsumeParams& params) {
                 if (!accepted) {
                     std::lock_guard<std::mutex> lock(m_queueMutex);
                     ++m_eventsDropped;
+                    // В журнал — обязательно: без него потеря выглядит как
+                    // «компонента иногда не доставляет сообщения».
+                    BRMQ_LOG_WARN("External event rejected by 1C (buffer overflow), dropped "
+                                  + std::to_string(m_eventsDropped)
+                                  + " message(s), deliveryTag " + std::to_string(msg.deliveryTag));
                     m_consumerError = "External event buffer overflow: "
                         + std::to_string(m_eventsDropped)
                         + " message(s) not delivered to 1C. Reduce prefetch, "
@@ -365,6 +404,7 @@ void RabbitApi1S::startConsumer(const ConsumeParams& params) {
         },
         // onCancelled
         [this](const std::string& consumerTag) {
+            BRMQ_LOG_WARN("Consumer cancelled by broker: " + consumerTag);
             std::lock_guard<std::mutex> lock(m_queueMutex);
             m_consumerError = "Consumer cancelled: " + consumerTag;
             if (m_useExternalEvent && m_addin) {
@@ -544,6 +584,7 @@ void RabbitApi1S::watchdogLoop() {
         }
 
         if (!lossReported) {
+            BRMQ_LOG_WARN("Auto reconnect: connection lost (" + m_client->lastError() + ")");
             notifyConnectionEvent(u"ConnectionLost", m_client->lastError());
             lossReported = true;
         }
@@ -567,8 +608,10 @@ void RabbitApi1S::watchdogLoop() {
         if (restored) {
             delayMs = m_reconnectDelayMs;
             lossReported = false;
-            notifyConnectionEvent(u"Reconnected", std::to_string(
-                m_reconnectCount.load(std::memory_order_relaxed)));
+            const int count = m_reconnectCount.load(std::memory_order_relaxed);
+            BRMQ_LOG_INFO("Auto reconnect: connection restored (attempt #"
+                          + std::to_string(count) + ")");
+            notifyConnectionEvent(u"Reconnected", std::to_string(count));
             continue;
         }
 
@@ -576,6 +619,8 @@ void RabbitApi1S::watchdogLoop() {
             std::lock_guard<std::mutex> errLock(m_queueMutex);
             m_consumerError = "Auto reconnect failed: " + failure;
         }
+        BRMQ_LOG_ERROR("Auto reconnect failed: " + failure + ", next try in "
+                       + std::to_string(delayMs) + " ms");
         // Нарастающая пауза: брокер после сетевой аварии поднимается не сразу,
         // а попытка раз в полсекунды всю ночь — это лог на гигабайт.
         if (!sleepFor(delayMs)) break;

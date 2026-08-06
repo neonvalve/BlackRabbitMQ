@@ -12,6 +12,16 @@
 
 namespace BlackRabbitMQ {
 
+namespace {
+// Метку ставит сам поток цикла: сравнивать сохранённый std::thread::id нельзя —
+// поле пишет поток цикла, а читает поток 1С, и это гонка.
+thread_local const EventLoop* t_loopOwner = nullptr;
+} // namespace
+
+bool EventLoop::inLoopThread() const noexcept {
+    return t_loopOwner == this;
+}
+
 #if !defined(_WIN32) && !defined(_WIN64)
 
 EventLoop::EventLoop()
@@ -151,7 +161,7 @@ void EventLoop::onTick(int /*fd*/, short /*what*/, void* arg) {
 }
 
 void EventLoop::runLoop(EventLoop* self) {
-    self->m_loopThreadId = std::this_thread::get_id();
+    t_loopOwner = self;
     // Блокирующий цикл: поток спит на poll(), 0% CPU в простое.
     // Выход — loopbreak из onTick (см. stop()).
     int flags = 0;
@@ -165,6 +175,9 @@ void EventLoop::runLoop(EventLoop* self) {
             std::this_thread::sleep_for(std::chrono::milliseconds(kTickMs));
         }
     }
+    // Поток завершается: метку снимаем, иначе новый EventLoop по тому же
+    // адресу принял бы чужой поток за свой.
+    t_loopOwner = nullptr;
 }
 
 #else

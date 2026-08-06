@@ -1,4 +1,5 @@
 #include "Platform/LibeventTransport.h"
+#include "Logger.h"
 
 #include <openssl/ssl.h>
 #include <openssl/x509v3.h>
@@ -59,6 +60,8 @@ uint16_t LibeventHandler::onNegotiate(AMQP::TcpConnection*, uint16_t interval) {
         chosen = (interval > 0 && interval < wanted) ? interval : wanted;
     }
     heartbeatSec.store(chosen, std::memory_order_release);
+    BRMQ_LOG_INFO("Heartbeat negotiated: broker offered " + std::to_string(interval)
+                  + " s, using " + std::to_string(chosen) + " s");
     return chosen;
 }
 
@@ -67,10 +70,12 @@ bool LibeventHandler::onSecured(AMQP::TcpConnection*, const SSL* ssl) {
 
     const long result = SSL_get_verify_result(const_cast<SSL*>(ssl));
     if (result != X509_V_OK) {
-        fail(std::string("TLS certificate rejected: ")
-             + X509_verify_cert_error_string(result));
+        const std::string reason = X509_verify_cert_error_string(result);
+        BRMQ_LOG_ERROR("TLS: certificate rejected for host " + host + ": " + reason);
+        fail("TLS certificate rejected: " + reason);
         return false;
     }
+    BRMQ_LOG_INFO("TLS: peer certificate verified for host " + host);
     return true;
 }
 

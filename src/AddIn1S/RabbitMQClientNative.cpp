@@ -68,6 +68,8 @@ long RabbitMQClientNative::FindProp(const WCHAR_T* wsPropName) {
     if (std::u16string(name) == u"ReconnectDelayMs") return ePropReconnectDelayMs;
     if (std::u16string(name) == u"ReconnectMaxDelayMs") return ePropReconnectMaxDelayMs;
     if (std::u16string(name) == u"ReconnectCount") return ePropReconnectCount;
+    if (std::u16string(name) == u"LogFile") return ePropLogFile;
+    if (std::u16string(name) == u"LogLevel") return ePropLogLevel;
 
     return -1;
 }
@@ -101,6 +103,8 @@ const WCHAR_T* RabbitMQClientNative::GetPropName(long lPropNum, long /*lPropAlia
         case ePropReconnectDelayMs: return allocName(u"ReconnectDelayMs");
         case ePropReconnectMaxDelayMs: return allocName(u"ReconnectMaxDelayMs");
         case ePropReconnectCount:   return allocName(u"ReconnectCount");
+        case ePropLogFile:          return allocName(u"LogFile");
+        case ePropLogLevel:         return allocName(u"LogLevel");
         default: return nullptr;
     }
 }
@@ -131,7 +135,9 @@ bool RabbitMQClientNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal
         case ePropAutoReconnect:
         case ePropReconnectDelayMs:
         case ePropReconnectMaxDelayMs:
-        case ePropReconnectCount: {
+        case ePropReconnectCount:
+        case ePropLogFile:
+        case ePropLogLevel: {
             CallContext ctx(m_impl->memoryManager(), nullptr, 0, pvarPropVal);
             m_impl->getTlsPropImpl(lPropNum, ctx);
             return true;
@@ -164,7 +170,9 @@ bool RabbitMQClientNative::SetPropVal(const long lPropNum, tVariant* varPropVal)
         case ePropAutoReconnect:
         case ePropReconnectDelayMs:
         case ePropReconnectMaxDelayMs:
-        case ePropReconnectCount: {
+        case ePropReconnectCount:
+        case ePropLogFile:
+        case ePropLogLevel: {
             CallContext ctx(m_impl->memoryManager(), varPropVal, 1);
             m_impl->setTlsPropImpl(lPropNum, ctx);
             return true;
