@@ -1,0 +1,85 @@
+name: Build (Windows)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-msvc:
+    # Обе разрядности: платформа 1С чаще 32-битная, и такую сборку нужно
+    # проверять на каждом push, а не только при выпуске релиза.
+    name: MSVC Release ${{ matrix.addin_arch }}
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        include:
+          - platform: x64
+            triplet: x64-windows-static
+            addin_arch: x86_64
+          - platform: Win32
+            triplet: x86-windows-static
+            addin_arch: i386
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:/vcpkg/installed
+            C:/vcpkg/packages
+          key: vcpkg-${{ matrix.triplet }}-${{ hashFiles('.github/workflows/build-windows.yml') }}
+          restore-keys: vcpkg-${{ matrix.triplet }}-
+
+      - name: Install dependencies via vcpkg
+        run: |
+          vcpkg install poco[netssl]:${{ matrix.triplet }}
+          vcpkg install openssl:${{ matrix.triplet }}
+          vcpkg install nlohmann-json:${{ matrix.triplet }}
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -A ${{ matrix.platform }} `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
+            -DBUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      # Без экспортов 1С не загрузит компоненту, а компиляция об этом молчит.
+      - name: Проверить экспорт точек входа
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path build -Recurse -Filter BlackRabbitMQ.dll | Select-Object -First 1
+          if (-not $dll) { throw "BlackRabbitMQ.dll не собралась" }
+          $dumpbin = Get-ChildItem -Path "C:\Program Files*\Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $dumpbin) { Write-Host "dumpbin не найден, проверка пропущена"; exit 0 }
+          $exports = & $dumpbin.FullName /EXPORTS $dll.FullName | Out-String
+          foreach ($name in @("GetClassObject", "DestroyObject", "GetClassNames")) {
+            if ($exports -notmatch $name) { throw "DLL не экспортирует $name — 1С её не загрузит" }
+          }
+          Write-Host "Точки входа на месте"
+
+      # Компонента не должна тянуть msvcp140/vcruntime: 1С кладёт в свой bin
+      # рантайм 14.16, он перекрывает системный, и чужой ABI std::mutex роняет
+      # процесс платформы.
+      - name: Проверить, что CRT влинкован статически
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path build -Recurse -Filter BlackRabbitMQ.dll | Select-Object -First 1
+          $dumpbin = Get-ChildItem -Path "C:\Program Files*\Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $dumpbin) { Write-Host "dumpbin не найден, проверка пропущена"; exit 0 }
+          $deps = & $dumpbin.FullName /DEPENDENTS $dll.FullName | Out-String
+          foreach ($crt in @("MSVCP140", "VCRUNTIME140")) {
+            if ($deps -match $crt) { throw "DLL зависит от $crt — в процессе 1С подхватится её рантайм" }
+          }
+          Write-Host "CRT статический"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-dll-${{ matrix.addin_arch }}
+          path: build/**/BlackRabbitMQ.dll
+          if-no-files-found: error

@@ -1,0 +1,389 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BlackRabbitMQ — RabbitMQ для 1С:Предприятие</title>
+<meta name="description" content="Внешняя компонента, которая учит 1С работать с очередями RabbitMQ: отправлять сообщения с подтверждением, принимать их без опроса и не терять по дороге.">
+
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1d21;
+    --muted: #5c6470;
+    --line: #e3e6ea;
+    --card: #f7f8fa;
+    --accent: #b5342f;
+    --accent-soft: #fdf0ef;
+    --ok: #1f7a4d;
+    --code-bg: #f2f4f7;
+    --max: 62rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a;
+      --fg: #e8eaed;
+      --muted: #9aa3ad;
+      --line: #262b31;
+      --card: #1b1f24;
+      --accent: #ef6a63;
+      --accent-soft: #2a1b1a;
+      --ok: #4ec98a;
+      --code-bg: #1e2328;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171a; --fg: #e8eaed; --muted: #9aa3ad; --line: #262b31;
+    --card: #1b1f24; --accent: #ef6a63; --accent-soft: #2a1b1a; --ok: #4ec98a; --code-bg: #1e2328;
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff; --fg: #1a1d21; --muted: #5c6470; --line: #e3e6ea;
+    --card: #f7f8fa; --accent: #b5342f; --accent-soft: #fdf0ef; --ok: #1f7a4d; --code-bg: #f2f4f7;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 1.5rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: .12em .35em; border-radius: 4px; font-size: .9em; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
+    padding: 1rem 1.15rem; overflow-x: auto; font-size: .875rem; line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; }
+
+  header.hero { padding: 4.5rem 0 3rem; border-bottom: 1px solid var(--line); }
+  .badge {
+    display: inline-block; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft); border-radius: 100px;
+    padding: .3rem .85rem; margin-bottom: 1.25rem; font-weight: 600;
+  }
+  h1 { font-size: clamp(2.1rem, 5vw, 3.2rem); line-height: 1.1; margin: 0 0 1rem; letter-spacing: -.02em; }
+  .lede { font-size: clamp(1.05rem, 2.2vw, 1.25rem); color: var(--muted); max-width: 42rem; margin: 0 0 2rem; }
+  .cta { display: flex; flex-wrap: wrap; gap: .75rem; }
+  .btn {
+    display: inline-block; padding: .7rem 1.3rem; border-radius: 8px; font-weight: 600;
+    border: 1px solid var(--line); color: var(--fg);
+  }
+  .btn:hover { text-decoration: none; border-color: var(--accent); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { opacity: .9; color: #fff; }
+
+  section { padding: 3.5rem 0; border-bottom: 1px solid var(--line); }
+  h2 { font-size: 1.6rem; margin: 0 0 .6rem; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 2rem; max-width: 44rem; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem 1.35rem; }
+  .card h3 { margin: 0 0 .4rem; font-size: 1.02rem; }
+  .card p { margin: 0; color: var(--muted); font-size: .93rem; }
+
+  .tbl-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .93rem; min-width: 34rem; }
+  th, td { text-align: left; padding: .7rem .8rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-weight: 600; font-size: .85rem; text-transform: uppercase; letter-spacing: .03em; }
+  td.was { color: var(--muted); }
+  td.now { color: var(--ok); font-weight: 500; }
+
+  .pricing { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+  .plan { border: 1px solid var(--line); border-radius: 12px; padding: 1.5rem; }
+  .plan.featured { border-color: var(--accent); }
+  .plan h3 { margin: 0 0 .25rem; font-size: 1.15rem; }
+  .plan .price { font-size: 1.05rem; color: var(--muted); margin-bottom: 1rem; }
+  .plan ul { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: .93rem; }
+  .plan li { margin-bottom: .4rem; }
+
+  footer { padding: 2.5rem 0 3.5rem; color: var(--muted); font-size: .9rem; }
+  .foot-links { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-bottom: 1rem; }
+</style>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge">Native API · 1С:Предприятие 8.3</span>
+    <h1>1С и RabbitMQ — напрямую</h1>
+    <p class="lede">
+      Внешняя компонента, которая учит 1С работать с очередями: отправлять сообщения,
+      получать их и не терять по дороге. Подключается как обычный макет конфигурации,
+      без шины и промежуточных сервисов. Работает на Windows и Linux, в 32 и 64 битах.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/neonvalve/BlackRabbitMQ/releases">Скачать релиз</a>
+      <a class="btn" href="https://github.com/neonvalve/BlackRabbitMQ">Исходный код</a>
+      <a class="btn" href="mailto:jsxlabor@gmail.com">Запросить лицензию</a>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Что это даёт разработчику 1С</h2>
+    <p class="sub">
+      Компонента говорит с брокером по AMQP напрямую из встроенного языка.
+      Ни промежуточного сервиса, ни HTTP-обёртки, ни 1С:Шины — очередь становится
+      обычным объектом, с которым работают из кода.
+    </p>
+    <div class="grid">
+      <div class="card">
+        <h3>Ставится как общий макет</h3>
+        <p>ZIP с бинарниками добавляется в конфигурацию как макет «Двоичные данные» и уезжает вместе с ней. Ничего не нужно устанавливать на машины пользователей и держать рядом отдельную службу.</p>
+      </div>
+      <div class="card">
+        <h3>Сообщения приходят сами</h3>
+        <p>После <code>BasicConsume</code> компонента вызывает <code>ОбработкаВнешнегоСобытия</code> и передаёт тело, deliveryTag и свойства. Регламентное задание, которое дёргает очередь раз в минуту, не нужно — и задержки в эту минуту тоже.</p>
+      </div>
+      <div class="card">
+        <h3>Есть и режим опроса</h3>
+        <p>В фоновом задании на сервере, где внешних событий нет, работает <code>BasicConsumeMessage</code>: забрать очередное сообщение по требованию. Одна и та же компонента и на клиенте, и на сервере.</p>
+      </div>
+      <div class="card">
+        <h3>Подтверждаете вы, а не компонента</h3>
+        <p><code>BasicAck</code> вызывается после того, как документ проведён. Не получилось — <code>BasicReject</code> вернёт сообщение в очередь или отбросит. Пока подтверждения нет, сообщение у брокера живо.</p>
+      </div>
+      <div class="card">
+        <h3>Темп приёма под контролем</h3>
+        <p>Prefetch задаёт, сколько сообщений отдавать сеансу разом, — база не захлебнётся на пике и не будет простаивать, когда работы много.</p>
+      </div>
+      <div class="card">
+        <h3>Топология из встроенного языка</h3>
+        <p><code>DeclareExchange</code>, <code>DeclareQueue</code>, <code>BindQueue</code> и аргументы очереди — TTL, dead-letter, приоритеты. Схему создаёт сама конфигурация при запуске, без похода к администратору брокера.</p>
+      </div>
+      <div class="card">
+        <h3>Свойства сообщения целиком</h3>
+        <p>CorrelationId, MessageId, ReplyTo, ContentType, Type, Expiration, приоритет и произвольные заголовки — то, на чём строится сопоставление ответа с запросом и маршрутизация.</p>
+      </div>
+      <div class="card">
+        <h3>Пощупать можно до внедрения</h3>
+        <p>Исходный код открыт — его можно прочитать и собрать самому, это важно для компоненты, которая работает внутри процесса платформы. Демо-стенд с готовыми обработками для 1С высылаем по запросу.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Чем отличаемся</h2>
+    <p class="sub">
+      Связать 1С с RabbitMQ можно тремя способами. Два из них работают —
+      но платят за это лишним звеном в схеме или потерей контроля над очередью.
+    </p>
+    <div class="grid">
+      <div class="card">
+        <h3>Свой мост на HTTP</h3>
+        <p>Между 1С и брокером ставят сервис-посредник. Его нужно где-то развернуть, обновлять, мониторить и чинить в три часа ночи. Ручное подтверждение, prefetch и повторную доставку придётся написать в нём заново — а заодно решить, что делать, если упал сам мост.</p>
+      </div>
+      <div class="card">
+        <h3>AMQP 1.0 через шину</h3>
+        <p>Платформа умеет AMQP 1.0 и может ходить в RabbitMQ 4.x. Ценой возни с HTTP-заглушкой и без контроля над prefetch, ручным ack/reject и топологией очередей: что даёт механизм — тем и пользуетесь.</p>
+      </div>
+      <div class="card">
+        <h3>Компонента напрямую</h3>
+        <p>1С разговаривает с брокером по AMQP 0.9.1 сама. Подтверждение, темп приёма, обменники и очереди — из встроенного языка, разворачивать рядом нечего, промежуточных звеньев, которые могут упасть, нет.</p>
+      </div>
+    </div>
+    <p class="sub" style="margin:2.5rem 0 1.25rem">
+      Отдельный разговор — реализации, которые уже пробовали писать до нас.
+      Вот грабли, на которые там наступают чаще всего, и что сделано здесь.
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>Что происходит</th><th>Как бывает</th><th>Как здесь</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Соединение простаивает</td>
+            <td class="was">цикл крутится вхолостую и съедает четверть ядра</td>
+            <td class="now">поток спит в ожидании данных — сотые доли процента</td>
+          </tr>
+          <tr>
+            <td>Брокер не отвечает</td>
+            <td class="was">ожидание без срока — сеанс 1С зависает</td>
+            <td class="now">у каждой операции таймаут, молчание становится ошибкой</td>
+          </tr>
+          <tr>
+            <td>Ответ пришёл с опозданием</td>
+            <td class="was">засчитывается как результат следующей операции</td>
+            <td class="now">у операций свои номера, опоздавший ответ отбрасывается</td>
+          </tr>
+          <tr>
+            <td>Подтверждаем обработку</td>
+            <td class="was">ack уходит не в тот канал — брокер отвечает ошибкой</td>
+            <td class="now">ack идёт в канал, где сообщение и было получено</td>
+          </tr>
+          <tr>
+            <td>Отправили сообщение</td>
+            <td class="was">управление возвращается до ответа брокера</td>
+            <td class="now">ждём подтверждения, не пришло — будет ошибка</td>
+          </tr>
+          <tr>
+            <td>Опечатка в ключе маршрутизации</td>
+            <td class="was">сообщение тихо исчезает</td>
+            <td class="now">сразу ошибка: код, обменник и ключ</td>
+          </tr>
+          <tr>
+            <td>Сообщение обработать не удалось</td>
+            <td class="was">остаётся только удалить</td>
+            <td class="now">reject с возвратом в очередь или без</td>
+          </tr>
+          <tr>
+            <td>В теле сообщения нулевой байт</td>
+            <td class="was">строка обрезается по первому нулю</td>
+            <td class="now">тело передаётся целиком, по длине</td>
+          </tr>
+          <tr>
+            <td>Свойства сообщения</td>
+            <td class="was">набор чисел, значения которых нужно помнить</td>
+            <td class="now">именованные: CorrelationId, ReplyTo, Type, заголовки</td>
+          </tr>
+          <tr>
+            <td>У клиента 32-битная 1С</td>
+            <td class="was">в поставке только x64</td>
+            <td class="now">в пакете сразу оба бинарника</td>
+          </tr>
+          <tr>
+            <td>Компонента внутри процесса 1С</td>
+            <td class="was">чужой рантайм роняет платформу</td>
+            <td class="now">рантайм влинкован статически</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Как это работает внутри</h2>
+    <p class="sub">
+      Компонента — не обёртка над консольной утилитой и не клиент, который просыпается
+      по расписанию. Внутри неё живёт собственное соединение с брокером и отдельный
+      поток, который его обслуживает, пока 1С занята своими делами.
+    </p>
+<pre><code>поток 1С                          фоновый поток компоненты
+─────────────────────────────     ────────────────────────────────
+BasicPublish(...)   ──задача──►   отправка кадра брокеру
+   ждёт ответа                    ожидание данных, процессор свободен
+   ◄─── управление вернулось ──   пришло подтверждение — будим вызов
+
+BasicConsume(...)   ──задача──►   подписка на очередь
+   ...форма живёт своей жизнью    пришло сообщение
+   ОбработкаВнешнегоСобытия ◄──   внешнее событие в 1С
+   BasicAck(deliveryTag) ─────►   подтверждение уходит брокеру</code></pre>
+    <div class="grid" style="margin-top:2rem">
+      <div class="card">
+        <h3>Соединение живёт в своём потоке</h3>
+        <p>После <code>Connect</code> поднимается фоновый поток с событийным циклом. Он спит в системном ожидании и просыпается, когда пришли данные, — поэтому простаивающее соединение не стоит вам процессорного времени.</p>
+      </div>
+      <div class="card">
+        <h3>Все вызовы идут через этот поток</h3>
+        <p>Клиентская библиотека AMQP не рассчитана на работу из нескольких потоков сразу. Каждый вызов из 1С ставится в очередь к потоку цикла и выполняется там — иначе отправка кадра и ожидание ответа разъезжаются, и ответ брокера теряется.</p>
+      </div>
+      <div class="card">
+        <h3>Снаружи всё синхронно</h3>
+        <p>Внутри асинхронность, а в коде 1С — обычные вызовы, которые возвращают управление, когда брокер ответил. У каждого ожидания свой срок: не ответил — исключение и текст в <code>GetLastError</code>, а не зависший сеанс.</p>
+      </div>
+      <div class="card">
+        <h3>Ресурсы закрываются по порядку</h3>
+        <p>Сначала AMQP-соединение, потом сокет, потом поток цикла. Порядок задан устройством классов, поэтому он один и тот же при штатном закрытии, при обрыве и при уничтожении объекта в 1С.</p>
+      </div>
+      <div class="card">
+        <h3>Свой транспорт под каждую ОС</h3>
+        <p>На Linux — libevent, на Windows — сокеты POCO с отключённой задержкой Нейгла и отдельным сокетом для пробуждения цикла. Наверх обе платформы отдают одинаковый набор методов.</p>
+      </div>
+      <div class="card">
+        <h3>Компонента не мешает платформе</h3>
+        <p>Рантайм C++ влинкован статически, поэтому в процессе 1С не появляется второй копии библиотек. Имена свойств и методов выделяются через менеджер памяти платформы — так, как того требует Native API.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Как это выглядит в коде</h2>
+    <p class="sub">Подключаем макет, отправляем заказ, принимаем ответы. Опрашивать очередь в цикле не нужно — сообщения приходят сами.</p>
+<pre><code>ПодключитьВнешнююКомпоненту("ОбщийМакет.BlackRabbitMQ", "BRMQ", ТипВнешнейКомпоненты.Native);
+Клиент = Новый("AddIn.BRMQ.BlackRabbitMQ");
+
+Клиент.Connect("rabbit.local", 5672, "user", "pass", "/", 0, Ложь, 30);
+Клиент.DeclareQueue("orders", Ложь, Истина, Ложь, Ложь, 0, "");
+
+// Отправка: строка вернёт управление только когда брокер подтвердит приём
+Клиент.CorrelationId = "order-1024";
+Клиент.BasicPublish("", "orders", ТелоJSON, 0, Истина, "");
+
+// Приём: подписываемся один раз, дальше сообщения приходят сами
+Клиент.EnableExternalEvent(Истина);
+Клиент.BasicConsume("orders", "", Ложь, Ложь, 50, "");
+
+Процедура ОбработкаВнешнегоСобытия(Источник, Событие, Данные)
+    Пакет = ПрочитатьJSON(Данные);       // тело, deliveryTag и свойства сообщения
+    ОбработатьЗаказ(Пакет["body"]);
+    Клиент.BasicAck(Пакет["deliveryTag"]);   // подтверждаем, когда заказ уже обработан
+КонецПроцедуры</code></pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Сколько стоит</h2>
+    <p class="sub">
+      Исходный код открыт: его можно прочитать, собрать самому и убедиться,
+      что внутри нет ничего лишнего. Пробовать и применять некоммерчески —
+      бесплатно. Любое коммерческое использование — только по платной лицензии.
+    </p>
+    <div class="pricing">
+      <div class="plan">
+        <h3>Некоммерческое использование</h3>
+        <div class="price">бесплатно</div>
+        <ul>
+          <li>Все возможности, без урезаний и таймеров</li>
+          <li>Исходники и сборка своими руками</li>
+          <li>Пилот и оценка до покупки, без ограничения по сроку</li>
+          <li>Личные и учебные проекты, некоммерческие организации</li>
+        </ul>
+      </div>
+      <div class="plan featured">
+        <h3>Коммерческая лицензия</h3>
+        <div class="price">по запросу</div>
+        <ul>
+          <li>Обязательна для любого использования в коммерческой деятельности</li>
+          <li>Лицензия на организацию — не на сервер и не на железо</li>
+          <li>Демо-стенд, примеры и документация по эксплуатации</li>
+          <li>Обновления и совместимость с новыми версиями платформы</li>
+        </ul>
+      </div>
+      <div class="plan">
+        <h3>Поддержка и внедрение</h3>
+        <div class="price">по договору</div>
+        <ul>
+          <li>Ошибки чиним в первую очередь</li>
+          <li>Поможем спроектировать схему очередей под вашу задачу</li>
+          <li>Разберём повторную обработку, dead-letter и мониторинг</li>
+          <li>Поможем переехать с текущего решения</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:1.5rem">
+      Написать или запросить лицензию — <a href="mailto:jsxlabor@gmail.com">jsxlabor@gmail.com</a>
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-links">
+      <a href="https://github.com/neonvalve/BlackRabbitMQ">GitHub</a>
+      <a href="https://github.com/neonvalve/BlackRabbitMQ/releases">Релизы</a>
+      <a href="https://github.com/neonvalve/BlackRabbitMQ/issues">Сообщить об ошибке</a>
+      <a href="mailto:jsxlabor@gmail.com">Написать нам</a>
+    </div>
+    <p style="margin:0">
+      BlackRabbitMQ — внешняя компонента для 1С:Предприятие 8.3.
+      Некоммерческое использование свободно, коммерческое — только по платной лицензии.
+    </p>
+  </div>
+</footer>

@@ -1,0 +1,184 @@
+name: Release
+
+# Пакет внешней компоненты для 1С собирается из бинарников обеих платформ:
+# один ZIP с MANIFEST.XML, где перечислены и Linux, и Windows.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version-check:
+    name: Версия тега = версия проекта
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Сверить тег с project(VERSION)
+        id: check
+        run: |
+          cmake_version=$(grep -m1 -E '^\s*VERSION [0-9]' CMakeLists.txt | tr -d ' ' | sed 's/VERSION//')
+          echo "version=$cmake_version" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "Ручной запуск, версия из CMakeLists: $cmake_version"
+            exit 0
+          fi
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$tag_version" != "$cmake_version" ]; then
+            echo "Тег $GITHUB_REF_NAME не совпадает с project VERSION $cmake_version" >&2
+            exit 1
+          fi
+
+  build-linux:
+    name: Linux x86_64
+    needs: version-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libevent-dev libssl-dev uuid-dev
+
+      - name: Build (Release)
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
+          cmake --build build -- -j$(nproc)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: build/libBlackRabbitMQ.so
+          if-no-files-found: error
+
+  build-windows:
+    # Платформа 1С чаще ставится 32-битной, и x64-компоненту такой процесс
+    # не загрузит в принципе — поэтому в релиз идут обе разрядности.
+    name: Windows ${{ matrix.addin_arch }}
+    needs: version-check
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        include:
+          - platform: x64
+            triplet: x64-windows-static
+            addin_arch: x86_64
+          - platform: Win32
+            triplet: x86-windows-static
+            addin_arch: i386
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:/vcpkg/installed
+            C:/vcpkg/packages
+          key: vcpkg-${{ matrix.triplet }}-${{ hashFiles('.github/workflows/release.yml') }}
+          restore-keys: vcpkg-${{ matrix.triplet }}-
+
+      - name: Install dependencies via vcpkg
+        run: |
+          vcpkg install poco[netssl]:${{ matrix.triplet }}
+          vcpkg install openssl:${{ matrix.triplet }}
+          vcpkg install nlohmann-json:${{ matrix.triplet }}
+
+      - name: Build (Release)
+        run: |
+          cmake -B build -A ${{ matrix.platform }} `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
+            -DBUILD_TESTS=OFF
+          cmake --build build --config Release
+
+      - name: Проверить экспорт точек входа
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path build -Recurse -Filter BlackRabbitMQ.dll | Select-Object -First 1
+          if (-not $dll) { throw "BlackRabbitMQ.dll не собралась" }
+          $dumpbin = Get-ChildItem -Path "C:\Program Files*\Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($dumpbin) {
+            $exports = & $dumpbin.FullName /EXPORTS $dll.FullName | Out-String
+            foreach ($name in @("GetClassObject", "DestroyObject", "GetClassNames")) {
+              if ($exports -notmatch $name) { throw "DLL не экспортирует $name — 1С её не загрузит" }
+            }
+            Write-Host "Точки входа на месте"
+          } else {
+            Write-Host "dumpbin не найден, проверка пропущена"
+          }
+          Copy-Item $dll.FullName -Destination BlackRabbitMQ.dll
+
+      - name: Проверить разрядность
+        shell: pwsh
+        run: |
+          $fs = [System.IO.File]::OpenRead("BlackRabbitMQ.dll")
+          $br = New-Object System.IO.BinaryReader($fs)
+          $fs.Position = 0x3C; $pe = $br.ReadInt32(); $fs.Position = $pe + 4
+          $machine = $br.ReadUInt16(); $br.Close()
+          $expected = if ("${{ matrix.addin_arch }}" -eq "i386") { 0x14c } else { 0x8664 }
+          if ($machine -ne $expected) {
+            throw "DLL собрана под 0x{0:X}, ожидалась ${{ matrix.addin_arch }}" -f $machine
+          }
+          Write-Host "Разрядность соответствует ${{ matrix.addin_arch }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.addin_arch }}
+          path: BlackRabbitMQ.dll
+          if-no-files-found: error
+
+  package:
+    name: Пакет для 1С и релиз
+    needs: [version-check, build-linux, build-windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-x86_64
+          path: artifacts/linux
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-x86_64
+          path: artifacts/windows-x86_64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-i386
+          path: artifacts/windows-i386
+
+      - name: Собрать ZIP компоненты
+        run: |
+          python3 packaging/make_package.py \
+            --version "${{ needs.version-check.outputs.version }}" \
+            --output "dist/BlackRabbitMQ-${{ needs.version-check.outputs.version }}.zip" \
+            --component Linux:x86_64:artifacts/linux/libBlackRabbitMQ.so \
+            --component Windows:x86_64:artifacts/windows-x86_64/BlackRabbitMQ.dll \
+            --component Windows:i386:artifacts/windows-i386/BlackRabbitMQ.dll
+          unzip -l "dist/BlackRabbitMQ-${{ needs.version-check.outputs.version }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: addin-1c
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - name: Приложить к релизу
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "Пакет внешней компоненты для 1С: Linux x86_64, Windows x86_64 и i386." \
+            dist/*.zip \
+            || gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber

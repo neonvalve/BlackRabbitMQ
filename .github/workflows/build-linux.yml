@@ -1,0 +1,56 @@
+name: Build (Linux)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-release:
+    name: GCC Release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libevent-dev libssl-dev uuid-dev
+
+      - name: Configure CMake (Release)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_ASAN=OFF -DBUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build -- -j$(nproc)
+
+      # Пакет для 1С по каждой сборке: проверяет, что MANIFEST.XML собирается,
+      # и даёт готовый ZIP для ручной проверки без выпуска релиза.
+      - name: Собрать пакет компоненты
+        run: cmake --build build --target package1c
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: addin-1c-linux
+          path: build/dist/*.zip
+          if-no-files-found: error
+
+  build-clang:
+    name: Clang Debug
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libevent-dev libssl-dev uuid-dev clang
+
+      - name: Configure CMake (Clang + UBSan)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=OFF -DENABLE_UBSAN=ON -DBUILD_TESTS=OFF
+        env:
+          CC: clang
+          CXX: clang++
+
+      - name: Build
+        run: cmake --build build -- -j$(nproc)

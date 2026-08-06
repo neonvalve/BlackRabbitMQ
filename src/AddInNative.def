@@ -1,0 +1,12 @@
+; Экспорт точек входа Native API для 1С (Windows).
+;
+; __declspec(dllexport) на определениях не годится: заголовки SDK объявляют эти
+; функции без него, и MSVC отвечает C2375 «redefinition; different linkage».
+; Модульный файл задаёт экспорт снаружи и конфликта не создаёт.
+LIBRARY BlackRabbitMQ
+EXPORTS
+    GetClassObject
+    DestroyObject
+    GetClassNames
+    SetPlatformCapabilities
+    GetAttachType

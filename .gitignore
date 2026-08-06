@@ -1,0 +1,48 @@
+# Build artifacts
+build/
+build-*/
+cmake-build-*/
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.exe
+*.exp
+*.pdb
+erl_crash.dump
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Package
+*.zip
+*.tar.gz
+*.deb
+*.rpm
+
+# Dependencies
+libs/
+lib/
+include/
+
+# Secret files
+.env
+*.pem
+*.key
+reference/
+
+# Материалы, поставляемые по лицензии
+/Main.MD
+/CODEMAP.md
+/CHANGELOG.md
+/demo/
+/tests/
+/docs/*.md
