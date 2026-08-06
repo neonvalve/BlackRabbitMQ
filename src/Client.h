@@ -8,6 +8,7 @@
 
 #include "Connection.h"
 #include "Channel.h"
+#include "TlsOptions.h"
 
 namespace BlackRabbitMQ {
 
@@ -33,7 +34,8 @@ public:
         const std::string& password,
         const std::string& vhost = "/",
         bool ssl = false,
-        int timeoutSec = 30
+        int timeoutSec = 30,
+        const TlsOptions& tls = {}
     );
 
     void disconnect();

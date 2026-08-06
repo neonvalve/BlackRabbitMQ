@@ -1,4 +1,8 @@
 #include "RabbitApi1S.h"
+// Ради номеров свойств: TLS-настройки различаются по enum, а не по числу —
+// у соседних методов номера захардкожены, и это ровно та ошибка, которую
+// не хочется повторять.
+#include "RabbitMQClientNative.h"
 #include "Client.h"
 #include "Consumer.h"
 #include "Message.h"
@@ -63,7 +67,42 @@ void RabbitApi1S::connectImpl(CallContext& ctx) {
 
     // Создать новое
     m_client.reset(new Client());
-    m_client->connect(host, port, user, pwd, vhost, ssl, timeout);
+    m_client->connect(host, port, user, pwd, vhost, ssl, timeout, m_tls);
+}
+
+// --- Настройки TLS ---
+
+void RabbitApi1S::setTlsPropImpl(long propNum, CallContext& ctx) {
+    switch (propNum) {
+        case RabbitMQClientNative::ePropSslCaFile:
+            m_tls.caFile = ctx.stringParamUtf8();
+            break;
+        case RabbitMQClientNative::ePropSslVerifyPeer:
+            m_tls.verifyPeer = ctx.boolParam();
+            break;
+        case RabbitMQClientNative::ePropSslVerifyHostname:
+            m_tls.verifyHostname = ctx.boolParam();
+            break;
+        default:
+            break;
+    }
+}
+
+void RabbitApi1S::getTlsPropImpl(long propNum, CallContext& ctx) {
+    switch (propNum) {
+        case RabbitMQClientNative::ePropSslCaFile:
+            ctx.setStringOrEmptyResult(m_converter.from_bytes(m_tls.caFile));
+            break;
+        case RabbitMQClientNative::ePropSslVerifyPeer:
+            ctx.setBoolResult(m_tls.verifyPeer);
+            break;
+        case RabbitMQClientNative::ePropSslVerifyHostname:
+            ctx.setBoolResult(m_tls.verifyHostname);
+            break;
+        default:
+            ctx.setEmptyResult();
+            break;
+    }
 }
 
 // --- Exchange ---

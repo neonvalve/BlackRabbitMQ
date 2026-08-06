@@ -1,5 +1,8 @@
 #include "Platform/LibeventTransport.h"
 
+#include <openssl/ssl.h>
+#include <openssl/x509v3.h>
+
 #include <chrono>
 #include <thread>
 #include <mutex>
@@ -7,6 +10,55 @@
 #include <stdexcept>
 
 namespace BlackRabbitMQ {
+
+bool LibeventHandler::onSecuring(AMQP::TcpConnection*, SSL* ssl) {
+    if (!tls.verifyPeer) {
+        // Явный отказ от проверки — режим для отладки и закрытых стендов.
+        SSL_set_verify(ssl, SSL_VERIFY_NONE, nullptr);
+        return true;
+    }
+
+    SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
+
+    SSL_CTX* ctx = SSL_get_SSL_CTX(ssl);
+    if (!tls.caFile.empty()) {
+        // Самоподписанный брокер: доверяем ровно указанному корню.
+        if (SSL_CTX_load_verify_locations(ctx, tls.caFile.c_str(), nullptr) != 1) {
+            fail("TLS: cannot load CA file " + tls.caFile);
+            return false;
+        }
+    } else if (SSL_CTX_set_default_verify_paths(ctx) != 1) {
+        fail("TLS: cannot load system certificate store");
+        return false;
+    }
+
+    // SNI: без него брокер с несколькими сертификатами отдаст не тот.
+    SSL_set_tlsext_host_name(ssl, host.c_str());
+
+    if (tls.verifyHostname) {
+        // Цепочка сама по себе ничего не говорит о том, к тому ли серверу мы
+        // подключились: валидный сертификат чужого хоста прошёл бы проверку.
+        X509_VERIFY_PARAM* param = SSL_get0_param(ssl);
+        X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+        if (X509_VERIFY_PARAM_set1_host(param, host.c_str(), 0) != 1) {
+            fail("TLS: cannot set expected host name " + host);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool LibeventHandler::onSecured(AMQP::TcpConnection*, const SSL* ssl) {
+    if (!tls.verifyPeer) return true;
+
+    const long result = SSL_get_verify_result(const_cast<SSL*>(ssl));
+    if (result != X509_V_OK) {
+        fail(std::string("TLS certificate rejected: ")
+             + X509_verify_cert_error_string(result));
+        return false;
+    }
+    return true;
+}
 
 LibeventTransport::LibeventTransport() = default;
 
@@ -23,8 +75,8 @@ void LibeventTransport::connect(const AMQP::Address& address, int timeoutSec) {
     // 1. EventLoop — владеет event_base
     m_eventLoop.reset(new EventLoop());
 
-    // 2. Handler на event_base из EventLoop
-    m_handler.reset(new LibeventHandler(m_eventLoop->base()));
+    // 2. Handler на event_base из EventLoop; ему же принадлежит политика TLS
+    m_handler.reset(new LibeventHandler(m_eventLoop->base(), m_tls, address.hostname()));
 
     // 3. AMQP соединение
     m_amqpConn.reset(new AMQP::TcpConnection(m_handler.get(), address));

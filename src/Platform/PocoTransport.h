@@ -41,6 +41,7 @@ public:
     ~PocoTransport() override;
 
     // ITransport
+    void setTlsOptions(const TlsOptions& options) override { m_tls = options; }
     void connect(const AMQP::Address& address, int timeoutSec) override;
     void disconnect() override;
     std::unique_ptr<AMQP::Channel> createChannel() override;
@@ -75,6 +76,11 @@ public:
 private:
     void startLoop(const std::string& host, uint16_t port, bool ssl);
     void stopLoop();
+    // Клиентский TLS-контекст по TlsOptions: политика проверки, доверенные
+    // корни, набор шифров. Возвращает готовый к connect() сокет.
+    Poco::Net::StreamSocket* createSecureSocket();
+    // Сверяет сертификат брокера с именем хоста после рукопожатия.
+    void verifyPeerCertificate();
     // Ждёт завершения AMQP-handshake (onReady) или бросает по таймауту:
     // connect() не имеет права возвращать управление на полуоткрытом соединении.
     void waitForReady(int timeoutSec);
@@ -128,6 +134,7 @@ private:
     std::string m_host;
     uint16_t m_port;
     bool m_ssl;
+    TlsOptions m_tls;
 };
 
 } // namespace BlackRabbitMQ

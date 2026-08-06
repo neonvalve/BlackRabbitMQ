@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TaskRunner.h"
+#include "TlsOptions.h"
 
 #include <amqpcpp.h>
 #include <memory>
@@ -15,6 +16,10 @@ namespace BlackRabbitMQ {
 class ITransport {
 public:
     virtual ~ITransport() = default;
+
+    // Параметры TLS. Задаются до connect(): в момент рукопожатия менять
+    // политику проверки уже поздно.
+    virtual void setTlsOptions(const TlsOptions& options) = 0;
 
     // Установить соединение с брокером.
     // Бросает std::runtime_error при ошибке.

@@ -6,8 +6,13 @@
 #include <Poco/Net/PollSet.h>
 #include <Poco/Net/SecureStreamSocket.h>
 #include <Poco/Net/SSLManager.h>
+#include <Poco/Net/Context.h>
 #include <Poco/Net/AcceptCertificateHandler.h>
+#include <Poco/Net/RejectCertificateHandler.h>
+#include <Poco/Net/X509Certificate.h>
+#include <Poco/Net/SSLException.h>
 #include <Poco/Net/NetException.h>
+#include <Poco/SharedPtr.h>
 #include <Poco/Timespan.h>
 
 #include <chrono>
@@ -70,20 +75,29 @@ void PocoTransport::connect(const AMQP::Address& address, int timeoutSec) {
     m_port = address.port();
     m_ssl = address.secure();
 
-    Poco::Net::initializeSSL();
-
-    Poco::Net::SocketAddress sockAddr(m_host, m_port);
+    const Poco::Net::SocketAddress sockAddr(m_host, m_port);
+    const Poco::Timespan connectTimeout(timeoutSec > 0 ? timeoutSec : 30, 0);
 
     if (m_ssl) {
-        auto* sslSocket = new Poco::Net::SecureStreamSocket();
-        sslSocket->setPeerHostName(m_host);
-        sslSocket->setLazyHandshake(true);
-        m_socket.reset(sslSocket);
+        Poco::Net::initializeSSL();
+        m_socket.reset(createSecureSocket());
     } else {
         m_socket.reset(new Poco::Net::StreamSocket());
     }
 
-    m_socket->connect(sockAddr);
+    try {
+        // Для SecureStreamSocket connect выполняет и рукопожатие: раньше оно
+        // было отложенным (setLazyHandshake), и ошибка сертификата всплывала
+        // потом, посреди работы, вместо отказа в Connect.
+        m_socket->connect(sockAddr, connectTimeout);
+    } catch (const Poco::Net::SSLException& e) {
+        throw std::runtime_error("TLS handshake failed: " + e.displayText());
+    } catch (const Poco::Net::CertificateValidationException& e) {
+        throw std::runtime_error("TLS certificate rejected: " + e.displayText());
+    }
+
+    verifyPeerCertificate();
+
     m_socket->setBlocking(true);
     // Без TCP_NODELAY кадры AMQP копятся в буфере Nagle до delayed ACK: замер
     // в CI дал 46.9 мс на сообщение (10 000 сообщений — 469 с против 6 с на
@@ -116,6 +130,59 @@ void PocoTransport::connect(const AMQP::Address& address, int timeoutSec) {
 
     startLoop(m_host, m_port, m_ssl);
     waitForReady(timeoutSec);
+}
+
+Poco::Net::StreamSocket* PocoTransport::createSecureSocket() {
+    // Раньше сокет создавался без контекста: у SSLManager по умолчанию нет ни
+    // доверенных корней, ни заданной политики проверки — соединение выходило
+    // зашифрованным, но не проверенным, то есть уязвимым к подмене брокера.
+    Poco::Net::Context::Params params;
+    params.verificationMode = m_tls.verifyPeer ? Poco::Net::Context::VERIFY_RELAXED
+                                               : Poco::Net::Context::VERIFY_NONE;
+    params.caLocation = m_tls.caFile;
+    // Системное хранилище — только когда свой корень не указан: для брокера
+    // с самоподписанным сертификатом нужен именно caFile.
+    params.loadDefaultCAs = m_tls.caFile.empty();
+    params.cipherList = "HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK";
+
+    Poco::Net::Context::Ptr context =
+        new Poco::Net::Context(Poco::Net::Context::TLS_CLIENT_USE, params);
+
+    // Реакция на непроверенный сертификат живёт в SSLManager, а не в контексте.
+    Poco::SharedPtr<Poco::Net::InvalidCertificateHandler> handler;
+    if (m_tls.verifyPeer) {
+        handler = new Poco::Net::RejectCertificateHandler(false);
+    } else {
+        handler = new Poco::Net::AcceptCertificateHandler(false);
+    }
+    Poco::Net::SSLManager::instance().initializeClient(nullptr, handler, context);
+
+    auto* socket = new Poco::Net::SecureStreamSocket(context);
+    // Имя хоста нужно дважды: как SNI в ClientHello и как образец для сверки
+    // с сертификатом.
+    socket->setPeerHostName(m_host);
+    return socket;
+}
+
+void PocoTransport::verifyPeerCertificate() {
+    if (!m_ssl || !m_tls.verifyPeer || !m_tls.verifyHostname) return;
+
+    // Проверку имени делаем явно: VERIFY_RELAXED подтверждает цепочку, но
+    // валидный сертификат постороннего сервера прошёл бы её тоже.
+    auto* secure = static_cast<Poco::Net::SecureStreamSocket*>(m_socket.get());
+    bool matches = false;
+    std::string subject;
+    try {
+        const Poco::Net::X509Certificate cert = secure->peerCertificate();
+        subject = cert.subjectName();
+        matches = cert.verify(m_host);
+    } catch (const Poco::Exception& e) {
+        throw std::runtime_error("TLS certificate check failed: " + e.displayText());
+    }
+    if (!matches) {
+        throw std::runtime_error("TLS certificate does not match host " + m_host
+                                 + " (certificate subject: " + subject + ")");
+    }
 }
 
 void PocoTransport::waitForReady(int timeoutSec) {

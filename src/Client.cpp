@@ -21,14 +21,16 @@ void Client::connect(
     const std::string& password,
     const std::string& vhost,
     bool ssl,
-    int timeoutSec)
+    int timeoutSec,
+    const TlsOptions& tls)
 {
     m_error.clear();
     m_timeoutSec = timeoutSec > 0 ? timeoutSec : 30;
+    // Политику TLS дальше хранит транспорт — при Reconnect она сохраняется.
 
     AMQP::Address address(host, port, AMQP::Login(user, password), vhost, ssl);
 
-    m_connection.reset(new Connection(address, timeoutSec));
+    m_connection.reset(new Connection(address, timeoutSec, tls));
 
     try {
         m_connection->connect();

@@ -21,11 +21,14 @@ static std::unique_ptr<ITransport> createTransport() {
 #endif
 }
 
-Connection::Connection(const AMQP::Address& address, int timeoutSec)
+Connection::Connection(const AMQP::Address& address, int timeoutSec,
+                       const TlsOptions& tls)
     : m_address(address)
     , m_timeoutSec(timeoutSec)
     , m_transport(createTransport())
 {
+    // До connect(): в момент рукопожатия политику проверки менять поздно.
+    m_transport->setTlsOptions(tls);
 }
 
 Connection::~Connection() {

@@ -15,7 +15,8 @@ namespace BlackRabbitMQ {
 // Ни одного #ifdef — весь платформенный код за интерфейсом.
 class Connection {
 public:
-    explicit Connection(const AMQP::Address& address, int timeoutSec = 30);
+    explicit Connection(const AMQP::Address& address, int timeoutSec = 30,
+                        const TlsOptions& tls = {});
     ~Connection();
 
     Connection(const Connection&) = delete;

@@ -36,6 +36,11 @@ public:
         ePropClusterId,
         ePropExpiration,
         ePropReplyTo,
+        // Настройки защищённого соединения. Задаются до Connect: в момент
+        // рукопожатия политику проверки менять поздно.
+        ePropSslCaFile,
+        ePropSslVerifyPeer,
+        ePropSslVerifyHostname,
         ePropLast
     };
 

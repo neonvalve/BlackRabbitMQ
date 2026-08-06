@@ -18,7 +18,25 @@ namespace BlackRabbitMQ {
 // ожидающая сторона (поток 1С) просыпается по condition_variable.
 // Опрашивать состояние AMQP::TcpConnection из чужого потока нельзя: это гонка.
 struct LibeventHandler : AMQP::LibEventHandler {
-    explicit LibeventHandler(event_base* evbase) : AMQP::LibEventHandler(evbase) {}
+    LibeventHandler(event_base* evbase, TlsOptions tlsOptions, std::string peerHost)
+        : AMQP::LibEventHandler(evbase)
+        , tls(std::move(tlsOptions))
+        , host(std::move(peerHost)) {}
+
+    // TLS: до рукопожатия задаём политику проверки и доверенные корни,
+    // после — сверяем результат. Без этого AMQP-CPP шифрует трафик, но
+    // сертификат брокера не проверяет вовсе.
+    bool onSecuring(AMQP::TcpConnection* connection, SSL* ssl) override;
+    bool onSecured(AMQP::TcpConnection* connection, const SSL* ssl) override;
+
+    // Зафиксировать причину отказа и разбудить ожидающего: соединение,
+    // отклонённое на рукопожатии, иначе выглядело бы как таймаут.
+    void fail(const std::string& message) {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (error.empty()) error = message;
+        finished = true;
+        cv.notify_all();
+    }
 
     void onReady(AMQP::TcpConnection*) override {
         std::lock_guard<std::mutex> lock(mutex);
@@ -51,6 +69,8 @@ struct LibeventHandler : AMQP::LibEventHandler {
     bool finished = false;   // ошибка или потеря связи — ждать больше нечего
     std::string error;
     std::atomic<bool> lost{true};
+    TlsOptions tls;
+    std::string host;
 };
 
 // Linux/macOS транспорт: libevent + AMQP::TcpConnection.
@@ -61,6 +81,7 @@ public:
     ~LibeventTransport() override;
 
     // ITransport
+    void setTlsOptions(const TlsOptions& options) override { m_tls = options; }
     void connect(const AMQP::Address& address, int timeoutSec) override;
     void disconnect() override;
     std::unique_ptr<AMQP::Channel> createChannel() override;
@@ -90,6 +111,7 @@ private:
     mutable std::mutex m_errorMutex;
     std::string m_error;
     int m_timeoutSec{30};
+    TlsOptions m_tls;
 };
 
 } // namespace BlackRabbitMQ

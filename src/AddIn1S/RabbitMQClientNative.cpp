@@ -60,6 +60,9 @@ long RabbitMQClientNative::FindProp(const WCHAR_T* wsPropName) {
     if (std::u16string(name) == u"ClusterId") return ePropClusterId;
     if (std::u16string(name) == u"Expiration") return ePropExpiration;
     if (std::u16string(name) == u"ReplyTo") return ePropReplyTo;
+    if (std::u16string(name) == u"SslCaFile") return ePropSslCaFile;
+    if (std::u16string(name) == u"SslVerifyPeer") return ePropSslVerifyPeer;
+    if (std::u16string(name) == u"SslVerifyHostname") return ePropSslVerifyHostname;
 
     return -1;
 }
@@ -85,6 +88,9 @@ const WCHAR_T* RabbitMQClientNative::GetPropName(long lPropNum, long /*lPropAlia
         case ePropClusterId:        return allocName(u"ClusterId");
         case ePropExpiration:       return allocName(u"Expiration");
         case ePropReplyTo:          return allocName(u"ReplyTo");
+        case ePropSslCaFile:        return allocName(u"SslCaFile");
+        case ePropSslVerifyPeer:    return allocName(u"SslVerifyPeer");
+        case ePropSslVerifyHostname: return allocName(u"SslVerifyHostname");
         default: return nullptr;
     }
 }
@@ -108,6 +114,13 @@ bool RabbitMQClientNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal
             m_impl->getMsgPropImpl(lPropNum, ctx);
             return true;
         }
+        case ePropSslCaFile:
+        case ePropSslVerifyPeer:
+        case ePropSslVerifyHostname: {
+            CallContext ctx(m_impl->memoryManager(), nullptr, 0, pvarPropVal);
+            m_impl->getTlsPropImpl(lPropNum, ctx);
+            return true;
+        }
         default:
             return false;
     }
@@ -127,6 +140,13 @@ bool RabbitMQClientNative::SetPropVal(const long lPropNum, tVariant* varPropVal)
         case ePropReplyTo: {
             CallContext ctx(m_impl->memoryManager(), varPropVal, 1);
             m_impl->setMsgPropImpl(lPropNum, ctx);
+            return true;
+        }
+        case ePropSslCaFile:
+        case ePropSslVerifyPeer:
+        case ePropSslVerifyHostname: {
+            CallContext ctx(m_impl->memoryManager(), varPropVal, 1);
+            m_impl->setTlsPropImpl(lPropNum, ctx);
             return true;
         }
         default:

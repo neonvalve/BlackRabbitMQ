@@ -3,6 +3,7 @@
 #include "Component.h"
 #include "CallContext.h"
 #include "Message.h"
+#include "TlsOptions.h"
 
 #include <amqpcpp/table.h>
 
@@ -118,6 +119,10 @@ public:
     void getPriorityImpl(CallContext& ctx);
     void setMsgPropImpl(long propNum, CallContext& ctx);
     void getMsgPropImpl(long propNum, CallContext& ctx);
+    // SslCaFile / SslVerifyPeer / SslVerifyHostname — политика проверки
+    // сертификата брокера. Читаются в момент Connect.
+    void setTlsPropImpl(long propNum, CallContext& ctx);
+    void getTlsPropImpl(long propNum, CallContext& ctx);
 
 private:
     // Параметры активного потребителя: нужны, чтобы поднять его после обрыва.
@@ -145,6 +150,7 @@ private:
     std::unique_ptr<Client> m_client;
     std::unique_ptr<Consumer> m_consumer;
     ConsumeParams m_consumeParams;
+    TlsOptions m_tls;
 
     // Очередь сообщений для polling-совместимости (BasicConsumeMessage)
     std::queue<Message> m_messageQueue;
