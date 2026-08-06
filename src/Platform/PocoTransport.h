@@ -28,6 +28,10 @@ namespace BlackRabbitMQ {
 class PocoTransport : public ITransport, public AMQP::ConnectionHandler, public ITaskRunner {
 public:
     static constexpr size_t BUFFER_SIZE = 8 * 1024 * 1024;
+    // Потолок роста буферов. Разбор кадра требует, чтобы кадр целиком лежал
+    // в буфере: если брокер согласовал большой frame max, 8 МБ может не хватить,
+    // и буфер растёт до этого предела, а не теряет хвост молча.
+    static constexpr size_t MAX_BUFFER_SIZE = 64 * 1024 * 1024;
     static constexpr size_t TEMP_BUFFER_SIZE = 1 * 1024 * 1024;
     // Цикл спит на poll и будится событием, поэтому таймаут длинный:
     // он нужен только как страховка и точка проверки флага остановки.
@@ -49,9 +53,10 @@ public:
     ITaskRunner& taskRunner() override { return *this; }
 
     // ITaskRunner
-    bool inLoopThread() const noexcept override {
-        return m_thread && std::this_thread::get_id() == m_loopThreadId;
-    }
+    // Определение в .cpp: принадлежность потоку определяется thread_local
+    // меткой, которую ставит сам цикл. Сравнение с сохранённым thread::id
+    // было гонкой — поле пишет поток цикла, а читает поток 1С.
+    bool inLoopThread() const noexcept override;
     void post(std::function<void()> task) override {
         {
             std::lock_guard<std::mutex> lock(m_taskMutex);
@@ -76,6 +81,8 @@ private:
     static void loopThread(PocoTransport* self);
     void loopIteration();
     void sendDataFromBuffer();
+    // Отдаёт накопленное парсеру AMQP-CPP и сдвигает разобранное.
+    void parseInBuffer();
     void drainTasks();
     // Будит цикл датаграммой на loopback: аналог self-pipe из EventLoop.
     // Без него операция ждала бы истечения poll, а сам poll приходилось бы
@@ -93,8 +100,12 @@ private:
         size_t write(const char* src, size_t sz);
         void drain() { used = 0; }
         size_t available() const { return used; }
+        size_t capacity() const { return data.size(); }
         const char* ptr() const { return data.data(); }
         void shift(size_t count);
+        // Расширяет буфер так, чтобы влезло ещё need байт, но не выше limit.
+        // false — потолок достигнут и место не освободилось.
+        bool ensureSpace(size_t need, size_t limit);
     };
 
     std::unique_ptr<Poco::Net::StreamSocket> m_socket;
@@ -112,7 +123,6 @@ private:
     mutable std::mutex m_errorMutex;
     std::string m_error;
     std::unique_ptr<std::thread> m_thread;
-    std::thread::id m_loopThreadId;
     std::mutex m_taskMutex;
     std::vector<std::function<void()>> m_tasks;
     std::string m_host;

@@ -17,6 +17,13 @@
 
 namespace BlackRabbitMQ {
 
+namespace {
+// Метку ставит сам поток цикла. Прежняя проверка сравнивала std::thread::id,
+// который писал поток цикла, а читал поток 1С — то есть была гонкой; на
+// Windows-пути её некому поймать, ThreadSanitizer гоняется только на Linux.
+thread_local const PocoTransport* t_loopOwner = nullptr;
+} // namespace
+
 // --- Buffer ---
 
 size_t PocoTransport::Buffer::write(const char* src, size_t sz) {
@@ -33,6 +40,16 @@ void PocoTransport::Buffer::shift(size_t count) {
     size_t diff = used - count;
     std::memmove(data.data(), data.data() + count, diff);
     used = diff;
+}
+
+bool PocoTransport::Buffer::ensureSpace(size_t need, size_t limit) {
+    if (data.size() - used >= need) return true;
+    if (used + need > limit) return false;
+    size_t grown = data.size() ? data.size() * 2 : need;
+    while (grown - used < need) grown *= 2;
+    if (grown > limit) grown = limit;
+    data.resize(grown, 0);
+    return data.size() - used >= need;
 }
 
 // --- Constructor / Destructor ---
@@ -197,8 +214,12 @@ void PocoTransport::drainTasks() {
     for (auto& task : tasks) task();
 }
 
+bool PocoTransport::inLoopThread() const noexcept {
+    return t_loopOwner == this;
+}
+
 void PocoTransport::loopThread(PocoTransport* self) {
-    self->m_loopThreadId = std::this_thread::get_id();
+    t_loopOwner = self;
     while (!self->m_stop.load(std::memory_order_acquire)) {
         try {
             self->loopIteration();
@@ -211,6 +232,9 @@ void PocoTransport::loopThread(PocoTransport* self) {
             self->setError(e.what());
         }
     }
+    // Поток завершается — метку снимаем, иначе повторно созданный транспорт
+    // с тем же адресом принял бы чужой поток за свой.
+    t_loopOwner = nullptr;
 }
 
 void PocoTransport::loopIteration() {
@@ -245,23 +269,53 @@ void PocoTransport::loopIteration() {
                 m_tmpBuf.resize(expected, 0);
             int received = m_socket->receiveBytes(m_tmpBuf.data(), expected);
             if (received <= 0) break;
-            m_inBuf->write(m_tmpBuf.data(), received);
+
+            // Buffer::write при заполненном буфере пишет меньше запрошенного.
+            // Раньше результат не проверялся: хвост пропадал, и разбор кадров
+            // ломался — на плотном входящем потоке соединение приходилось
+            // поднимать заново. Сначала отдаём накопленное парсеру (он освободит
+            // место), при необходимости растим буфер до MAX_BUFFER_SIZE.
+            const size_t total = static_cast<size_t>(received);
+            size_t written = m_inBuf->write(m_tmpBuf.data(), total);
+            if (written < total) {
+                parseInBuffer();
+                written += m_inBuf->write(m_tmpBuf.data() + written, total - written);
+            }
+            if (written < total) {
+                const size_t rest = total - written;
+                if (!m_inBuf->ensureSpace(rest, MAX_BUFFER_SIZE)) {
+                    setError("Receive buffer overflow: frame does not fit into "
+                             + std::to_string(MAX_BUFFER_SIZE) + " bytes");
+                    if (m_amqpConn) m_amqpConn->close();
+                    break;
+                }
+                written += m_inBuf->write(m_tmpBuf.data() + written, rest);
+            }
             expected = m_socket->available();
         }
     }
 
-    if (m_amqpConn && m_inBuf->available() > 0) {
-        size_t parsed = m_amqpConn->parse(m_inBuf->ptr(), m_inBuf->available());
-        if (parsed == m_inBuf->available()) m_inBuf->drain();
-        else if (parsed > 0) m_inBuf->shift(parsed);
-    }
+    parseInBuffer();
     sendDataFromBuffer();
 }
 
+void PocoTransport::parseInBuffer() {
+    if (!m_amqpConn || m_inBuf->available() == 0) return;
+    const size_t parsed = m_amqpConn->parse(m_inBuf->ptr(), m_inBuf->available());
+    if (parsed == m_inBuf->available()) m_inBuf->drain();
+    else if (parsed > 0) m_inBuf->shift(parsed);
+}
+
 void PocoTransport::sendDataFromBuffer() {
-    if (m_outBuf->available() > 0 && m_socket) {
-        m_socket->sendBytes(m_outBuf->ptr(), static_cast<int>(m_outBuf->available()));
-        m_outBuf->drain();
+    if (!m_socket || !m_outBuf) return;
+    // sendBytes может принять меньше запрошенного. Раньше буфер очищался
+    // целиком независимо от результата — неотправленный хвост исчезал, и до
+    // брокера уходил обрезанный кадр. Сдвигаем ровно на отданное.
+    while (m_outBuf->available() > 0) {
+        const int sent = m_socket->sendBytes(m_outBuf->ptr(),
+                                             static_cast<int>(m_outBuf->available()));
+        if (sent <= 0) break; // сокет закрыт или временно не принимает
+        m_outBuf->shift(static_cast<size_t>(sent));
     }
 }
 
@@ -270,7 +324,16 @@ void PocoTransport::sendDataFromBuffer() {
 void PocoTransport::onData(AMQP::Connection*, const char* data, size_t size) {
     size_t written = m_outBuf->write(data, size);
     while (written < size) {
+        const size_t before = m_outBuf->available();
         sendDataFromBuffer();
+        // Сокет ничего не принял (закрыт или переполнен): без роста буфера
+        // цикл крутился бы вечно, а без буфера — потерялся бы хвост кадра.
+        if (m_outBuf->available() == before
+            && !m_outBuf->ensureSpace(size - written, MAX_BUFFER_SIZE)) {
+            setError("Send buffer overflow: broker is not reading and the frame "
+                     "does not fit into " + std::to_string(MAX_BUFFER_SIZE) + " bytes");
+            return;
+        }
         written += m_outBuf->write(data + written, size - written);
     }
 }
