@@ -7,6 +7,7 @@
 
 #include <codecvt>
 #include <locale>
+#include <mutex>
 #include <string>
 
 namespace BlackRabbitMQ {
@@ -96,6 +97,11 @@ public:
     {
         bool result = false;
         try {
+            // Единственная точка входа для вызовов из 1С — здесь же берётся
+            // блокировка состояния компоненты. Фоновый сторож переподключения
+            // работает с тем же состоянием и захватывает мьютекс через try_lock,
+            // чтобы никогда не задерживать вызывающий поток платформы.
+            std::lock_guard<std::mutex> lock(m_callMutex);
             m_skipAddError = false;
             m_lastError.clear();
             CallContext ctx(m_memManager, paParams, lSizeArray, pvarRetValue);
@@ -110,6 +116,9 @@ public:
     IAddInDefBase* addin() const { return m_addin; }
 
 protected:
+    // Защищает состояние компоненты между потоком платформы и фоновым сторожем
+    // переподключения. Сторож берёт его только через try_lock.
+    std::mutex m_callMutex;
     IAddInDefBase* m_addin;
     MemoryManager m_memManager;
     std::string m_lastError;

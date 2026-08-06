@@ -35,7 +35,9 @@ public:
         const std::string& vhost = "/",
         bool ssl = false,
         int timeoutSec = 30,
-        const TlsOptions& tls = {}
+        const TlsOptions& tls = {},
+        // Интервал heartbeat: -1 — как предложит брокер, 0 — выключить.
+        int heartbeatSec = -1
     );
 
     void disconnect();

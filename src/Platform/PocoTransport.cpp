@@ -335,7 +335,15 @@ void PocoTransport::loopIteration() {
             if (m_tmpBuf.size() < static_cast<size_t>(expected))
                 m_tmpBuf.resize(expected, 0);
             int received = m_socket->receiveBytes(m_tmpBuf.data(), expected);
-            if (received <= 0) break;
+            if (received == 0) {
+                // Ноль байт на готовом к чтению сокете — это FIN: брокер закрыл
+                // соединение (например, по таймауту heartbeat). Раньше цикл
+                // просто выходил, и компонента считала себя подключённой, пока
+                // следующая операция не упиралась в таймаут.
+                markClosedByPeer("Connection closed by broker");
+                break;
+            }
+            if (received < 0) break;
 
             // Buffer::write при заполненном буфере пишет меньше запрошенного.
             // Раньше результат не проверялся: хвост пропадал, и разбор кадров
@@ -363,6 +371,7 @@ void PocoTransport::loopIteration() {
     }
 
     parseInBuffer();
+    sendHeartbeatIfDue();
     sendDataFromBuffer();
 }
 
@@ -414,7 +423,39 @@ void PocoTransport::onClosed(AMQP::Connection*) {
     m_closed.store(true, std::memory_order_release);
 }
 uint16_t PocoTransport::onNegotiate(AMQP::Connection*, uint16_t interval) {
-    return interval;
+    // Раньше предложение брокера принималось как есть, но кадры никто не слал:
+    // брокер разрывал простаивающее соединение через два интервала, а клиент
+    // продолжал считать себя подключённым. Теперь интервал осознанный, и его
+    // поддерживает sendHeartbeatIfDue().
+    uint16_t chosen = interval;
+    if (m_desiredHeartbeat == 0) {
+        chosen = 0;                                   // выключено намеренно
+    } else if (m_desiredHeartbeat > 0) {
+        const uint16_t wanted = static_cast<uint16_t>(m_desiredHeartbeat);
+        // Больше предложенного брокером просить нельзя — он такого не примет.
+        chosen = (interval > 0 && interval < wanted) ? interval : wanted;
+    }
+    m_heartbeatSec = chosen;
+    m_lastHeartbeatSent = std::chrono::steady_clock::now();
+    return chosen;
+}
+
+void PocoTransport::sendHeartbeatIfDue() {
+    if (m_heartbeatSec == 0 || !m_amqpConn) return;
+
+    // Половина интервала: у брокера остаётся запас на потерю одного кадра.
+    const auto period = std::chrono::milliseconds(m_heartbeatSec * 500);
+    const auto now = std::chrono::steady_clock::now();
+    if (now - m_lastHeartbeatSent < period) return;
+
+    m_lastHeartbeatSent = now;
+    m_amqpConn->heartbeat();
+}
+
+void PocoTransport::markClosedByPeer(const std::string& reason) {
+    setError(reason);
+    m_closed.store(true, std::memory_order_release);
+    if (m_amqpConn) m_amqpConn->close();
 }
 
 } // namespace BlackRabbitMQ

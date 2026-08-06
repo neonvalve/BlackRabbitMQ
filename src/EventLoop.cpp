@@ -141,6 +141,12 @@ void EventLoop::onTick(int /*fd*/, short /*what*/, void* arg) {
         // Дочерпываем очередь: иначе ожидающий runInLoop() не дождётся никогда.
         self->drainTasks();
         event_base_loopbreak(self->m_base);
+        return;
+    }
+    // Периодическая работа транспорта — heartbeat. Исключение отсюда утащило бы
+    // за собой поток цикла, поэтому гасим его здесь.
+    if (self->m_onTick) {
+        try { self->m_onTick(); } catch (...) {}
     }
 }
 

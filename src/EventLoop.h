@@ -52,6 +52,12 @@ public:
     }
     void post(std::function<void()> task) override;
 
+    // Задача, исполняемая каждый тик в потоке цикла (heartbeat и подобное).
+    // Ставится до run(): после запуска колбэк читает поток цикла.
+    void setTickCallback(std::function<void()> callback) {
+        m_onTick = std::move(callback);
+    }
+
     // Потокобезопасная проверка, запущен ли loop.
     bool isRunning() const noexcept { return m_running.load(std::memory_order_acquire); }
 
@@ -71,6 +77,8 @@ private:
     std::unique_ptr<std::thread> m_thread;
     std::atomic<bool> m_running;
     std::thread::id m_loopThreadId;
+
+    std::function<void()> m_onTick;
 
     std::mutex m_taskMutex;
     std::vector<std::function<void()>> m_tasks;

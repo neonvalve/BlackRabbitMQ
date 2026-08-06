@@ -36,7 +36,11 @@ RabbitApi1S::RabbitApi1S()
 {
 }
 
-RabbitApi1S::~RabbitApi1S() = default;
+RabbitApi1S::~RabbitApi1S() {
+    // Сторож трогает m_client и m_consumer — гасим его первым, иначе он
+    // переживёт поля, за которыми следит.
+    stopWatchdog();
+}
 
 // --- Проверка соединения ---
 
@@ -67,7 +71,11 @@ void RabbitApi1S::connectImpl(CallContext& ctx) {
 
     // Создать новое
     m_client.reset(new Client());
-    m_client->connect(host, port, user, pwd, vhost, ssl, timeout, m_tls);
+    m_client->connect(host, port, user, pwd, vhost, ssl, timeout, m_tls, m_heartbeat);
+
+    // Сторож живёт вместе с соединением и сам проверяет, включено ли
+    // автопереподключение: свойство могут выставить и после Connect.
+    startWatchdog();
 }
 
 // --- Настройки TLS ---
@@ -83,6 +91,24 @@ void RabbitApi1S::setTlsPropImpl(long propNum, CallContext& ctx) {
         case RabbitMQClientNative::ePropSslVerifyHostname:
             m_tls.verifyHostname = ctx.boolParam();
             break;
+        case RabbitMQClientNative::ePropHeartbeat:
+            m_heartbeat = ctx.intParam();
+            break;
+        case RabbitMQClientNative::ePropAutoReconnect:
+            m_autoReconnect.store(ctx.boolParam(), std::memory_order_release);
+            break;
+        case RabbitMQClientNative::ePropReconnectDelayMs: {
+            const int value = ctx.intParam();
+            // Пауза меньше сотни миллисекунд — это долбёжка в брокер, который
+            // и так не отвечает.
+            m_reconnectDelayMs = value < 100 ? 100 : value;
+            break;
+        }
+        case RabbitMQClientNative::ePropReconnectMaxDelayMs: {
+            const int value = ctx.intParam();
+            m_reconnectMaxDelayMs = value < m_reconnectDelayMs ? m_reconnectDelayMs : value;
+            break;
+        }
         default:
             break;
     }
@@ -98,6 +124,21 @@ void RabbitApi1S::getTlsPropImpl(long propNum, CallContext& ctx) {
             break;
         case RabbitMQClientNative::ePropSslVerifyHostname:
             ctx.setBoolResult(m_tls.verifyHostname);
+            break;
+        case RabbitMQClientNative::ePropHeartbeat:
+            ctx.setIntResult(m_heartbeat);
+            break;
+        case RabbitMQClientNative::ePropAutoReconnect:
+            ctx.setBoolResult(m_autoReconnect.load(std::memory_order_acquire));
+            break;
+        case RabbitMQClientNative::ePropReconnectDelayMs:
+            ctx.setIntResult(m_reconnectDelayMs);
+            break;
+        case RabbitMQClientNative::ePropReconnectMaxDelayMs:
+            ctx.setIntResult(m_reconnectMaxDelayMs);
+            break;
+        case RabbitMQClientNative::ePropReconnectCount:
+            ctx.setIntResult(m_reconnectCount.load(std::memory_order_relaxed));
             break;
         default:
             ctx.setEmptyResult();
@@ -436,7 +477,10 @@ void RabbitApi1S::reconnectImpl(CallContext& /*ctx*/) {
     if (!m_client) {
         throw std::runtime_error("Connection is not established! Use Connect() first");
     }
+    restoreConnection();
+}
 
+void RabbitApi1S::restoreConnection() {
     // Каналы и потребитель умерли вместе с соединением: сбрасываем до
     // переподключения, иначе Consumer попытается закрыть мёртвый канал.
     const ConsumeParams params = m_consumeParams;
@@ -453,6 +497,100 @@ void RabbitApi1S::reconnectImpl(CallContext& /*ctx*/) {
         startConsumer(params);
         m_consumeParams = params;
     }
+    m_reconnectCount.fetch_add(1, std::memory_order_relaxed);
+}
+
+// --- Автоматическое переподключение ---
+
+void RabbitApi1S::startWatchdog() {
+    if (m_watchdog.joinable()) return;
+    m_watchdogStop.store(false, std::memory_order_release);
+    m_watchdog = std::thread([this]() { watchdogLoop(); });
+}
+
+void RabbitApi1S::stopWatchdog() {
+    if (!m_watchdog.joinable()) return;
+    {
+        std::lock_guard<std::mutex> lock(m_watchdogMutex);
+        m_watchdogStop.store(true, std::memory_order_release);
+    }
+    m_watchdogCv.notify_all();
+    m_watchdog.join();
+}
+
+void RabbitApi1S::watchdogLoop() {
+    int delayMs = m_reconnectDelayMs;
+    // Проверяем связь чаще, чем переподключаемся: обрыв надо заметить быстро,
+    // а долбиться в недоступный брокер — незачем.
+    const int kCheckIntervalMs = 500;
+
+    auto sleepFor = [this](int ms) {
+        std::unique_lock<std::mutex> lock(m_watchdogMutex);
+        m_watchdogCv.wait_for(lock, std::chrono::milliseconds(ms),
+            [this]() { return m_watchdogStop.load(std::memory_order_acquire); });
+        return !m_watchdogStop.load(std::memory_order_acquire);
+    };
+
+    bool lossReported = false;
+    while (sleepFor(kCheckIntervalMs)) {
+        if (!m_autoReconnect.load(std::memory_order_acquire)) {
+            delayMs = m_reconnectDelayMs;
+            continue;
+        }
+        if (!m_client || m_client->isConnected()) {
+            delayMs = m_reconnectDelayMs;
+            lossReported = false;
+            continue;
+        }
+
+        if (!lossReported) {
+            notifyConnectionEvent(u"ConnectionLost", m_client->lastError());
+            lossReported = true;
+        }
+
+        // try_lock, а не lock: пока платформа занята своим вызовом, ждать её
+        // нельзя — иначе сторож задержит поток 1С на время переподключения.
+        std::unique_lock<std::mutex> lock(m_callMutex, std::try_to_lock);
+        if (!lock.owns_lock()) continue;
+        if (!m_client || m_client->isConnected()) continue;
+
+        bool restored = false;
+        std::string failure;
+        try {
+            restoreConnection();
+            restored = true;
+        } catch (const std::exception& e) {
+            failure = e.what();
+        }
+        lock.unlock();
+
+        if (restored) {
+            delayMs = m_reconnectDelayMs;
+            lossReported = false;
+            notifyConnectionEvent(u"Reconnected", std::to_string(
+                m_reconnectCount.load(std::memory_order_relaxed)));
+            continue;
+        }
+
+        {
+            std::lock_guard<std::mutex> errLock(m_queueMutex);
+            m_consumerError = "Auto reconnect failed: " + failure;
+        }
+        // Нарастающая пауза: брокер после сетевой аварии поднимается не сразу,
+        // а попытка раз в полсекунды всю ночь — это лог на гигабайт.
+        if (!sleepFor(delayMs)) break;
+        delayMs = (delayMs * 2 < m_reconnectMaxDelayMs) ? delayMs * 2
+                                                        : m_reconnectMaxDelayMs;
+    }
+}
+
+void RabbitApi1S::notifyConnectionEvent(const char16_t* event, const std::string& detail) {
+    if (!m_useExternalEvent || !m_addin) return;
+    std::u16string payload = toU16(detail);
+    m_addin->ExternalEvent(
+        const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(u"BlackRabbitMQ")),
+        const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(event)),
+        const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(payload.c_str())));
 }
 
 // --- ExternalEvent ---

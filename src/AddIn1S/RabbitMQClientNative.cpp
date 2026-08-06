@@ -63,6 +63,11 @@ long RabbitMQClientNative::FindProp(const WCHAR_T* wsPropName) {
     if (std::u16string(name) == u"SslCaFile") return ePropSslCaFile;
     if (std::u16string(name) == u"SslVerifyPeer") return ePropSslVerifyPeer;
     if (std::u16string(name) == u"SslVerifyHostname") return ePropSslVerifyHostname;
+    if (std::u16string(name) == u"Heartbeat") return ePropHeartbeat;
+    if (std::u16string(name) == u"AutoReconnect") return ePropAutoReconnect;
+    if (std::u16string(name) == u"ReconnectDelayMs") return ePropReconnectDelayMs;
+    if (std::u16string(name) == u"ReconnectMaxDelayMs") return ePropReconnectMaxDelayMs;
+    if (std::u16string(name) == u"ReconnectCount") return ePropReconnectCount;
 
     return -1;
 }
@@ -91,6 +96,11 @@ const WCHAR_T* RabbitMQClientNative::GetPropName(long lPropNum, long /*lPropAlia
         case ePropSslCaFile:        return allocName(u"SslCaFile");
         case ePropSslVerifyPeer:    return allocName(u"SslVerifyPeer");
         case ePropSslVerifyHostname: return allocName(u"SslVerifyHostname");
+        case ePropHeartbeat:        return allocName(u"Heartbeat");
+        case ePropAutoReconnect:    return allocName(u"AutoReconnect");
+        case ePropReconnectDelayMs: return allocName(u"ReconnectDelayMs");
+        case ePropReconnectMaxDelayMs: return allocName(u"ReconnectMaxDelayMs");
+        case ePropReconnectCount:   return allocName(u"ReconnectCount");
         default: return nullptr;
     }
 }
@@ -116,7 +126,12 @@ bool RabbitMQClientNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal
         }
         case ePropSslCaFile:
         case ePropSslVerifyPeer:
-        case ePropSslVerifyHostname: {
+        case ePropSslVerifyHostname:
+        case ePropHeartbeat:
+        case ePropAutoReconnect:
+        case ePropReconnectDelayMs:
+        case ePropReconnectMaxDelayMs:
+        case ePropReconnectCount: {
             CallContext ctx(m_impl->memoryManager(), nullptr, 0, pvarPropVal);
             m_impl->getTlsPropImpl(lPropNum, ctx);
             return true;
@@ -144,7 +159,12 @@ bool RabbitMQClientNative::SetPropVal(const long lPropNum, tVariant* varPropVal)
         }
         case ePropSslCaFile:
         case ePropSslVerifyPeer:
-        case ePropSslVerifyHostname: {
+        case ePropSslVerifyHostname:
+        case ePropHeartbeat:
+        case ePropAutoReconnect:
+        case ePropReconnectDelayMs:
+        case ePropReconnectMaxDelayMs:
+        case ePropReconnectCount: {
             CallContext ctx(m_impl->memoryManager(), varPropVal, 1);
             m_impl->setTlsPropImpl(lPropNum, ctx);
             return true;
@@ -159,6 +179,8 @@ bool RabbitMQClientNative::IsPropReadable(const long /*lPropNum*/) {
 }
 
 bool RabbitMQClientNative::IsPropWritable(const long lPropNum) {
+    // ReconnectCount — счётчик компоненты, писать его извне бессмысленно.
+    if (lPropNum == ePropReconnectCount) return false;
     return lPropNum >= ePropCorrelationId && lPropNum < ePropLast;
 }
 

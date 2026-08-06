@@ -7,10 +7,12 @@
 
 #include <amqpcpp/table.h>
 
-#include <memory>
-#include <queue>
-#include <mutex>
+#include <atomic>
 #include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <thread>
 
 namespace BlackRabbitMQ {
 
@@ -139,6 +141,19 @@ private:
     // Запустить потребителя по сохранённым параметрам (BasicConsume и Reconnect).
     void startConsumer(const ConsumeParams& params);
 
+    // Поднять соединение и потребителя. Общий путь для метода Reconnect
+    // и фонового сторожа; вызывается с уже захваченным m_callMutex.
+    void restoreConnection();
+
+    // Фоновый сторож: замечает обрыв и переподключается сам, с нарастающей
+    // паузой. Без него после ночного обрыва обмен стоит до прихода человека —
+    // фоновому заданию некому сказать Reconnect.
+    void watchdogLoop();
+    void startWatchdog();
+    void stopWatchdog();
+    // Уведомить 1С о смене состояния связи (только в событийном режиме).
+    void notifyConnectionEvent(const char16_t* event, const std::string& detail);
+
     void checkConnection();
     // Ack/Reject возможны только пока жив потребитель: подтверждать нужно
     // на канале, доставившем сообщение.
@@ -151,6 +166,17 @@ private:
     std::unique_ptr<Consumer> m_consumer;
     ConsumeParams m_consumeParams;
     TlsOptions m_tls;
+    int m_heartbeat{-1};    // -1 — как предложит брокер, 0 — выключить
+
+    // Автоматическое переподключение
+    std::atomic<bool> m_autoReconnect{false};
+    int m_reconnectDelayMs{1000};        // первая пауза
+    int m_reconnectMaxDelayMs{60000};    // потолок нарастающей паузы
+    std::atomic<int> m_reconnectCount{0};// сколько раз подняли связь
+    std::thread m_watchdog;
+    std::atomic<bool> m_watchdogStop{false};
+    std::mutex m_watchdogMutex;
+    std::condition_variable m_watchdogCv;
 
     // Очередь сообщений для polling-совместимости (BasicConsumeMessage)
     std::queue<Message> m_messageQueue;

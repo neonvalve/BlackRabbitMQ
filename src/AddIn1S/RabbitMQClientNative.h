@@ -41,6 +41,14 @@ public:
         ePropSslCaFile,
         ePropSslVerifyPeer,
         ePropSslVerifyHostname,
+        // Интервал heartbeat в секундах: -1 — как предложит брокер (умолчание),
+        // 0 — выключить, >0 — своё значение. Задаётся до Connect.
+        ePropHeartbeat,
+        // Автоматическое переподключение после обрыва.
+        ePropAutoReconnect,
+        ePropReconnectDelayMs,
+        ePropReconnectMaxDelayMs,
+        ePropReconnectCount,        // только чтение: сколько раз подняли связь
         ePropLast
     };
 

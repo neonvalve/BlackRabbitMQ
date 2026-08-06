@@ -16,7 +16,7 @@ namespace BlackRabbitMQ {
 class Connection {
 public:
     explicit Connection(const AMQP::Address& address, int timeoutSec = 30,
-                        const TlsOptions& tls = {});
+                        const TlsOptions& tls = {}, int heartbeatSec = -1);
     ~Connection();
 
     Connection(const Connection&) = delete;

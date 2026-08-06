@@ -22,7 +22,8 @@ void Client::connect(
     const std::string& vhost,
     bool ssl,
     int timeoutSec,
-    const TlsOptions& tls)
+    const TlsOptions& tls,
+    int heartbeatSec)
 {
     m_error.clear();
     m_timeoutSec = timeoutSec > 0 ? timeoutSec : 30;
@@ -30,7 +31,7 @@ void Client::connect(
 
     AMQP::Address address(host, port, AMQP::Login(user, password), vhost, ssl);
 
-    m_connection.reset(new Connection(address, timeoutSec, tls));
+    m_connection.reset(new Connection(address, timeoutSec, tls, heartbeatSec));
 
     try {
         m_connection->connect();

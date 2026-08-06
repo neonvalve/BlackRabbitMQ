@@ -48,6 +48,20 @@ bool LibeventHandler::onSecuring(AMQP::TcpConnection*, SSL* ssl) {
     return true;
 }
 
+uint16_t LibeventHandler::onNegotiate(AMQP::TcpConnection*, uint16_t interval) {
+    // По умолчанию AMQP-CPP соглашается с предложением брокера, но кадры не
+    // отправляет — соединение в простое брокер разрывал через два интервала.
+    uint16_t chosen = interval;
+    if (desiredHeartbeat == 0) {
+        chosen = 0;                                   // выключено намеренно
+    } else if (desiredHeartbeat > 0) {
+        const uint16_t wanted = static_cast<uint16_t>(desiredHeartbeat);
+        chosen = (interval > 0 && interval < wanted) ? interval : wanted;
+    }
+    heartbeatSec.store(chosen, std::memory_order_release);
+    return chosen;
+}
+
 bool LibeventHandler::onSecured(AMQP::TcpConnection*, const SSL* ssl) {
     if (!tls.verifyPeer) return true;
 
@@ -77,6 +91,11 @@ void LibeventTransport::connect(const AMQP::Address& address, int timeoutSec) {
 
     // 2. Handler на event_base из EventLoop; ему же принадлежит политика TLS
     m_handler.reset(new LibeventHandler(m_eventLoop->base(), m_tls, address.hostname()));
+    m_handler->desiredHeartbeat = m_heartbeat;
+
+    // Heartbeat отправляем сами, по тику цикла: у AMQP-CPP своего таймера нет.
+    m_lastHeartbeatSent = std::chrono::steady_clock::now();
+    m_eventLoop->setTickCallback([this]() { onLoopTick(); });
 
     // 3. AMQP соединение
     m_amqpConn.reset(new AMQP::TcpConnection(m_handler.get(), address));
@@ -180,6 +199,22 @@ std::unique_ptr<AMQP::Channel> LibeventTransport::createChannel() {
     }
 
     return channel;
+}
+
+void LibeventTransport::onLoopTick() {
+    // Исполняется в потоке цикла — там же, где живёт TcpConnection.
+    if (!m_amqpConn || !m_handler) return;
+
+    const uint16_t interval = m_handler->heartbeatSec.load(std::memory_order_acquire);
+    if (interval == 0) return;
+
+    // Половина интервала: у брокера остаётся запас на потерю одного кадра.
+    const auto period = std::chrono::milliseconds(interval * 500);
+    const auto now = std::chrono::steady_clock::now();
+    if (now - m_lastHeartbeatSent < period) return;
+
+    m_lastHeartbeatSent = now;
+    m_amqpConn->heartbeat();
 }
 
 void LibeventTransport::waitForReady(int timeoutSec) {

@@ -5,6 +5,7 @@
 
 #include <amqpcpp.h>
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -42,6 +43,7 @@ public:
 
     // ITransport
     void setTlsOptions(const TlsOptions& options) override { m_tls = options; }
+    void setHeartbeat(int seconds) override { m_desiredHeartbeat = seconds; }
     void connect(const AMQP::Address& address, int timeoutSec) override;
     void disconnect() override;
     std::unique_ptr<AMQP::Channel> createChannel() override;
@@ -89,6 +91,11 @@ private:
     void sendDataFromBuffer();
     // Отдаёт накопленное парсеру AMQP-CPP и сдвигает разобранное.
     void parseInBuffer();
+    // Шлёт heartbeat, если пришёл срок. Вызывается из потока цикла.
+    void sendHeartbeatIfDue();
+    // Брокер закрыл сокет: пометить соединение мёртвым, чтобы isConnected()
+    // сказал правду сразу, а не после таймаута следующей операции.
+    void markClosedByPeer(const std::string& reason);
     void drainTasks();
     // Будит цикл датаграммой на loopback: аналог self-pipe из EventLoop.
     // Без него операция ждала бы истечения poll, а сам poll приходилось бы
@@ -135,6 +142,9 @@ private:
     uint16_t m_port;
     bool m_ssl;
     TlsOptions m_tls;
+    int m_desiredHeartbeat{-1};     // что просим: -1 как брокер, 0 выключить
+    uint16_t m_heartbeatSec{0};     // что согласовали, пишет поток цикла
+    std::chrono::steady_clock::time_point m_lastHeartbeatSent{};
 };
 
 } // namespace BlackRabbitMQ

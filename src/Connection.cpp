@@ -22,13 +22,15 @@ static std::unique_ptr<ITransport> createTransport() {
 }
 
 Connection::Connection(const AMQP::Address& address, int timeoutSec,
-                       const TlsOptions& tls)
+                       const TlsOptions& tls, int heartbeatSec)
     : m_address(address)
     , m_timeoutSec(timeoutSec)
     , m_transport(createTransport())
 {
-    // До connect(): в момент рукопожатия политику проверки менять поздно.
+    // До connect(): в момент рукопожатия политику проверки менять поздно,
+    // а интервал heartbeat согласуется прямо в нём.
     m_transport->setTlsOptions(tls);
+    m_transport->setHeartbeat(heartbeatSec);
 }
 
 Connection::~Connection() {

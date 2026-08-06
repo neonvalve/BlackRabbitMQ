@@ -6,6 +6,7 @@
 #include <amqpcpp.h>
 #include <amqpcpp/libevent.h>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -28,6 +29,11 @@ struct LibeventHandler : AMQP::LibEventHandler {
     // сертификат брокера не проверяет вовсе.
     bool onSecuring(AMQP::TcpConnection* connection, SSL* ssl) override;
     bool onSecured(AMQP::TcpConnection* connection, const SSL* ssl) override;
+
+    // Согласование интервала heartbeat. Кадры отправляет транспорт по тику
+    // цикла: библиотека сама этого не делает, а брокер разрывает соединение,
+    // от которого не было ни байта два интервала.
+    uint16_t onNegotiate(AMQP::TcpConnection* connection, uint16_t interval) override;
 
     // Зафиксировать причину отказа и разбудить ожидающего: соединение,
     // отклонённое на рукопожатии, иначе выглядело бы как таймаут.
@@ -71,6 +77,8 @@ struct LibeventHandler : AMQP::LibEventHandler {
     std::atomic<bool> lost{true};
     TlsOptions tls;
     std::string host;
+    int desiredHeartbeat = -1;              // -1 как брокер, 0 выключить, >0 своё
+    std::atomic<uint16_t> heartbeatSec{0};  // согласованное значение
 };
 
 // Linux/macOS транспорт: libevent + AMQP::TcpConnection.
@@ -82,6 +90,7 @@ public:
 
     // ITransport
     void setTlsOptions(const TlsOptions& options) override { m_tls = options; }
+    void setHeartbeat(int seconds) override { m_heartbeat = seconds; }
     void connect(const AMQP::Address& address, int timeoutSec) override;
     void disconnect() override;
     std::unique_ptr<AMQP::Channel> createChannel() override;
@@ -99,6 +108,8 @@ public:
 
 private:
     void waitForReady(int timeoutSec);
+    // Вызывается тиком цикла: шлёт heartbeat, когда пришёл срок.
+    void onLoopTick();
     void setError(const std::string& message) {
         std::lock_guard<std::mutex> lock(m_errorMutex);
         m_error = message;
@@ -112,6 +123,8 @@ private:
     std::string m_error;
     int m_timeoutSec{30};
     TlsOptions m_tls;
+    int m_heartbeat{-1};
+    std::chrono::steady_clock::time_point m_lastHeartbeatSent{};
 };
 
 } // namespace BlackRabbitMQ
