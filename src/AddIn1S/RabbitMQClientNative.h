@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "sdk/ComponentBase.h"
 #include "sdk/AddInDefBase.h"
@@ -83,6 +83,8 @@ public:
         // при разборе «обмен встал» — сколько накопилось и как убрать мусор.
         eMethGetQueueInfo,
         eMethPurgeQueue,
+        // Дождаться подтверждений пакетной публикации.
+        eMethFlushPublish,
         eMethLast
     };
 

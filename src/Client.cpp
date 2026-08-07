@@ -113,6 +113,22 @@ void Client::setPublishMode(Channel::PublishMode mode) {
     if (m_channel) m_channel->setPublishMode(mode);
 }
 
+void Client::setPublishBatchSize(size_t size) {
+    m_publishBatchSize = size;
+    if (m_channel) m_channel->setPublishBatchSize(size);
+}
+
+void Client::flushPublish() {
+    // Канала может не быть вовсе: тогда и подтверждать нечего.
+    if (!m_channel) return;
+    try {
+        m_channel->flushPublish();
+    } catch (const std::exception& e) {
+        m_error = e.what();
+        throw;
+    }
+}
+
 Channel& Client::getOrCreateChannel() {
     if (!m_connection || !m_connection->isConnected()) {
         throw std::runtime_error("Not connected");
@@ -120,6 +136,7 @@ Channel& Client::getOrCreateChannel() {
     if (!m_channel || !m_channel->usable()) {
         m_channel = createChannel();
         m_channel->setPublishMode(m_publishMode);
+        m_channel->setPublishBatchSize(m_publishBatchSize);
     }
     return *m_channel;
 }

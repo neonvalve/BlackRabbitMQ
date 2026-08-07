@@ -1,4 +1,4 @@
-#include "RabbitMQClientNative.h"
+﻿#include "RabbitMQClientNative.h"
 #include "RabbitApi1S.h"
 
 #include <cstring>
@@ -225,6 +225,7 @@ long RabbitMQClientNative::FindMethod(const WCHAR_T* wsMethodName) {
     if (std::u16string(name) == u"SetPublishMode")      return eMethSetPublishMode;
     if (std::u16string(name) == u"GetQueueInfo")        return eMethGetQueueInfo;
     if (std::u16string(name) == u"PurgeQueue")          return eMethPurgeQueue;
+    if (std::u16string(name) == u"FlushPublish")        return eMethFlushPublish;
 
     return -1;
 }
@@ -255,6 +256,7 @@ const WCHAR_T* RabbitMQClientNative::GetMethodName(const long lMethodNum, const 
         case eMethSetPublishMode:       return allocName(u"SetPublishMode");
         case eMethGetQueueInfo:         return allocName(u"GetQueueInfo");
         case eMethPurgeQueue:           return allocName(u"PurgeQueue");
+        case eMethFlushPublish:         return allocName(u"FlushPublish");
         default: return nullptr;
     }
 }
@@ -275,6 +277,7 @@ long RabbitMQClientNative::GetNParams(const long lMethodNum) {
         case eMethSetPriority:
         case eMethSleepNative:          return 1;
         case eMethBasicCancel:
+        case eMethFlushPublish:
         case eMethReconnect:            return 0;
         case eMethBasicReject:          return 2;  // tag + requeue (НОВЫЙ!)
         case eMethEnableExternalEvent:  return 1;  // bool enable
@@ -384,6 +387,8 @@ bool RabbitMQClientNative::CallAsProc(const long lMethodNum,
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::basicRejectImpl, paParams, lSizeArray);
         case eMethSetPublishMode:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::setPublishModeImpl, paParams, lSizeArray);
+        case eMethFlushPublish:
+            return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::flushPublishImpl, paParams, lSizeArray);
         case eMethDeleteQueue:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::deleteQueueImpl, paParams, lSizeArray);
         case eMethBindQueue:

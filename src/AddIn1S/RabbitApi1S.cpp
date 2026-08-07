@@ -696,9 +696,20 @@ void RabbitApi1S::setPublishModeImpl(CallContext& ctx) {
         m_client->setPublishMode(Channel::PublishMode::Confirms);
     } else if (mode == "transactions" || mode == "tx") {
         m_client->setPublishMode(Channel::PublishMode::Transactions);
+    } else if (mode == "batch") {
+        m_client->setPublishMode(Channel::PublishMode::Batch);
     } else {
-        throw std::runtime_error("SetPublishMode: ожидается \"confirms\" или \"transactions\", получено: " + mode);
+        throw std::runtime_error("SetPublishMode: ожидается \"confirms\", \"transactions\" "
+                                 "или \"batch\", получено: " + mode);
     }
+    BRMQ_LOG_INFO("SetPublishMode: " + mode);
+}
+
+// --- Пакетная публикация ---
+
+void RabbitApi1S::flushPublishImpl(CallContext& /*ctx*/) {
+    checkConnection();
+    m_client->flushPublish();
 }
 
 // --- Sleep ---

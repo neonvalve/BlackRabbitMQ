@@ -118,6 +118,11 @@ public:
     // из спецификации AMQP 0.9.1, нужен на брокерах без поддержки confirms.
     void setPublishModeImpl(CallContext& ctx);
 
+    // FlushPublish() — дождаться подтверждения всего, что отправлено пакетно.
+    // В режиме "batch" публикация возвращает управление сразу, и до этого
+    // вызова сообщения нельзя считать доставленными.
+    void flushPublishImpl(CallContext& ctx);
+
     // SleepNative(milliseconds)
     void sleepNativeImpl(CallContext& ctx);
 

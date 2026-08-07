@@ -220,11 +220,23 @@ void Channel::ensureConfirms() {
     m_confirmsEnabled = true;
 
     m_channel->confirmSelect()
-        .onAck([this](uint64_t /*deliveryTag*/, bool /*multiple*/) {
+        .onAck([this](uint64_t deliveryTag, bool multiple) {
             uint64_t op = 0;
             std::string returned;
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
+                // В пакетном режиме подтверждения не относятся к конкретной
+                // операции: они двигают границу подтверждённого, а ждёт её
+                // flushPublish().
+                if (m_publishMode == PublishMode::Batch) {
+                    if (!m_returnedReason.empty() && m_batchError.empty()) {
+                        m_batchError = std::move(m_returnedReason);
+                        m_returnedReason.clear();
+                    }
+                    markConfirmed(deliveryTag, multiple);
+                    m_cv.notify_all();
+                    return;
+                }
                 op = m_pendingPublishOp;
                 returned = std::move(m_returnedReason);
                 m_returnedReason.clear();
@@ -239,10 +251,22 @@ void Channel::ensureConfirms() {
                 signalSuccess(op);
             }
         })
-        .onNack([this](uint64_t /*deliveryTag*/, bool /*multiple*/, bool /*requeue*/) {
+        .onNack([this](uint64_t deliveryTag, bool multiple, bool /*requeue*/) {
             uint64_t op = 0;
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
+                if (m_publishMode == PublishMode::Batch) {
+                    // Отказ по одному сообщению делает недоверенным весь пакет:
+                    // какое именно потеряно, вызывающий из 1С всё равно не
+                    // восстановит, поэтому честнее сообщить об ошибке пакета.
+                    if (m_batchError.empty()) {
+                        m_batchError = "publish: брокер не принял сообщение (nack), номер "
+                            + std::to_string(deliveryTag);
+                    }
+                    markConfirmed(deliveryTag, multiple);
+                    m_cv.notify_all();
+                    return;
+                }
                 op = m_pendingPublishOp;
             }
             if (op) {
@@ -252,12 +276,89 @@ void Channel::ensureConfirms() {
 
 }
 
+void Channel::markConfirmed(uint64_t deliveryTag, bool multiple) {
+    if (multiple) {
+        if (deliveryTag > m_confirmedNo) m_confirmedNo = deliveryTag;
+    } else if (deliveryTag == m_confirmedNo + 1) {
+        m_confirmedNo = deliveryTag;
+    } else {
+        m_ackedOutOfOrder.insert(deliveryTag);
+    }
+
+    // Подтянуть границу, если ранее пришли подтверждения не по порядку.
+    auto it = m_ackedOutOfOrder.begin();
+    while (it != m_ackedOutOfOrder.end() && *it == m_confirmedNo + 1) {
+        m_confirmedNo = *it;
+        it = m_ackedOutOfOrder.erase(it);
+    }
+    // Всё, что уже покрыто границей, хранить незачем.
+    m_ackedOutOfOrder.erase(m_ackedOutOfOrder.begin(),
+                            m_ackedOutOfOrder.upper_bound(m_confirmedNo));
+}
+
+void Channel::waitConfirms(const char* operation) {
+    std::unique_lock<std::mutex> lock(m_mutex);
+    if (m_confirmedNo >= m_publishedNo && m_batchError.empty()) return;
+
+    const bool signalled = m_cv.wait_for(
+        lock, std::chrono::milliseconds(m_timeoutMs),
+        [this]() { return m_confirmedNo >= m_publishedNo || !m_batchError.empty(); });
+
+    if (!m_batchError.empty()) {
+        const std::string error = std::move(m_batchError);
+        m_batchError.clear();
+        // Пакет оборван: дальше считаем с чистого листа, иначе одна ошибка
+        // будет всплывать на каждой следующей публикации.
+        m_publishedNo = 0;
+        m_confirmedNo = 0;
+        m_ackedOutOfOrder.clear();
+        throw std::runtime_error(error);
+    }
+    if (!signalled) {
+        const uint64_t pending = m_publishedNo - m_confirmedNo;
+        throw std::runtime_error(std::string(operation) + ": timeout "
+            + std::to_string(m_timeoutMs) + " ms, не подтверждено "
+            + std::to_string(pending) + " сообщений");
+    }
+}
+
+void Channel::flushPublish() {
+    if (m_publishMode != PublishMode::Batch) return;
+    waitConfirms("publish flush");
+}
+
 void Channel::publish(
     const std::string& exchange,
     const std::string& routingKey,
     const AMQP::Envelope& envelope,
     bool mandatory)
 {
+    if (m_publishMode == PublishMode::Batch) {
+        bool accepted = true;
+        m_runner.runInLoop([&]() {
+            ensureConfirms();
+            accepted = m_channel->publish(exchange, routingKey, envelope,
+                                          mandatory ? AMQP::mandatory : 0);
+            if (accepted) {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                ++m_publishedNo;
+            }
+        });
+        if (!accepted) {
+            throw std::runtime_error("publish: канал не принял сообщение");
+        }
+
+        // Окно заполнено — ждём подтверждений, иначе неподтверждённое копится
+        // без предела и на стороне брокера, и в памяти процесса 1С.
+        bool windowFull = false;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            windowFull = m_batchSize > 0 && (m_publishedNo - m_confirmedNo) >= m_batchSize;
+        }
+        if (windowFull) waitConfirms("publish batch");
+        return;
+    }
+
     const uint64_t seq = beginOp();
     {
         std::lock_guard<std::mutex> lock(m_mutex);

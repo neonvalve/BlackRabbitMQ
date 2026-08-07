@@ -110,6 +110,12 @@ public:
     // (стандарт AMQP 0.9.1 — для брокеров, где confirms не поддержаны).
     void setPublishMode(Channel::PublishMode mode);
 
+    // Размер окна пакетной публикации и ожидание подтверждений по всему
+    // отправленному. В пакетном режиме без flushPublish() считать сообщения
+    // доставленными нельзя.
+    void setPublishBatchSize(size_t size);
+    void flushPublish();
+
     // Тело без свойств.
     void publish(
         const std::string& exchange,
@@ -141,6 +147,7 @@ private:
     // Чем подтверждается публикация: confirms (быстрее, расширение RabbitMQ)
     // или транзакции (стандарт AMQP 0.9.1, для брокеров без confirms).
     Channel::PublishMode m_publishMode{Channel::PublishMode::Confirms};
+    size_t m_publishBatchSize{100};
     std::atomic<bool> m_connected{false};
     std::string m_error;
     int m_timeoutSec{30};                       // лимит ожидания ответа брокера

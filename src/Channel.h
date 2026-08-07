@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 
 namespace BlackRabbitMQ {
@@ -39,10 +40,26 @@ public:
     // Confirms — расширение RabbitMQ (confirm.select): быстрее, гарантия та же.
     // Transactions — класс tx из спецификации AMQP 0.9.1: медленнее вдвое,
     // но работает на брокерах, которые confirms не поддерживают.
-    enum class PublishMode { Confirms, Transactions };
+    // Batch — те же confirms, но управление возвращается сразу: подтверждения
+    // накапливаются и проверяются окном. Гарантия остаётся прежней (сообщение
+    // доставлено только после подтверждения), но узнаёте вы об этом позже —
+    // на flushPublish() или при заполнении окна. Для первичной выгрузки это
+    // разница между «шесть секунд на десять тысяч» и «полторы».
+    enum class PublishMode { Confirms, Transactions, Batch };
 
     void setPublishMode(PublishMode mode) noexcept { m_publishMode = mode; }
     PublishMode publishMode() const noexcept { return m_publishMode; }
+
+    // Размер окна: столько сообщений может быть в полёте, дальше публикация
+    // ждёт подтверждений. Ноль означает «не ограничивать», но тогда память
+    // на неподтверждённые растёт на стороне брокера и клиента.
+    void setPublishBatchSize(size_t size) noexcept { m_batchSize = size; }
+    size_t publishBatchSize() const noexcept { return m_batchSize; }
+
+    // Дождаться подтверждения всего отправленного. Бросает исключение, если
+    // брокер отверг сообщение или вернул непроходное: пока это не вызвано,
+    // считать пакет доставленным нельзя.
+    void flushPublish();
 
     Channel(const Channel&) = delete;
     Channel& operator=(const Channel&) = delete;
@@ -144,6 +161,12 @@ private:
     void ensureConfirms();
     void ensureReturnHandler();
 
+    // Учёт подтверждений в пакетном режиме. Вызывается из потока цикла
+    // с уже захваченным мьютексом.
+    void markConfirmed(uint64_t deliveryTag, bool multiple);
+    // Ждёт подтверждений до m_publishedNo. Мьютекс захватывает сам.
+    void waitConfirms(const char* operation);
+
     std::mutex m_mutex;
     std::condition_variable m_cv;
     bool m_ready{false};
@@ -164,6 +187,16 @@ private:
     uint64_t m_pendingPublishOp{0};
     std::string m_returnedReason;
     PublishMode m_publishMode{PublishMode::Confirms};
+
+    // Пакетный режим: сколько отправлено и до какого номера подтверждено.
+    // Брокер нумерует сообщения подряд с единицы и обычно подтверждает
+    // пачками (multiple), но не обязан — отдельные подтверждения складываем
+    // в m_ackedOutOfOrder, пока они не сомкнутся с непрерывной границей.
+    size_t m_batchSize{100};
+    uint64_t m_publishedNo{0};
+    uint64_t m_confirmedNo{0};
+    std::set<uint64_t> m_ackedOutOfOrder;
+    std::string m_batchError;
 
     // Объявлен последним: уничтожается первым, до мьютекса и cv, — callback'и
     // AMQP-CPP, срабатывающие при закрытии канала, обращаются к ним.
