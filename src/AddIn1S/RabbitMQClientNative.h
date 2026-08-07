@@ -79,6 +79,10 @@ public:
         eMethEnableExternalEvent,
         eMethReconnect,
         eMethSetPublishMode,
+        // Состояние очереди со слов брокера и её очистка: то, что спрашивают
+        // при разборе «обмен встал» — сколько накопилось и как убрать мусор.
+        eMethGetQueueInfo,
+        eMethPurgeQueue,
         eMethLast
     };
 

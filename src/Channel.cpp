@@ -101,18 +101,55 @@ void Channel::removeExchange(const std::string& name, int flags) {
 
 // --- Queue ---
 
-void Channel::declareQueue(
+Channel::QueueStats Channel::declareQueue(
     const std::string& name,
     int flags,
     const AMQP::Table& args)
 {
     const uint64_t seq = beginOp();
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_queueStats = QueueStats{};
+    }
     m_runner.runInLoop([&]() {
         m_channel->declareQueue(name, flags, args)
-            .onSuccess([this, seq]() { signalSuccess(seq); })
+            .onSuccess([this, seq](const std::string&, uint32_t messages, uint32_t consumers) {
+                {
+                    std::lock_guard<std::mutex> lock(m_mutex);
+                    m_queueStats.messageCount = messages;
+                    m_queueStats.consumerCount = consumers;
+                }
+                signalSuccess(seq);
+            })
             .onError([this, seq](const char* msg) { signalError(seq, msg); });
     });
     wait(seq, "declareQueue");
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_queueStats;
+}
+
+uint32_t Channel::purgeQueue(const std::string& name) {
+    const uint64_t seq = beginOp();
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_purgedCount = 0;
+    }
+    m_runner.runInLoop([&]() {
+        m_channel->purgeQueue(name)
+            .onSuccess([this, seq](uint32_t messages) {
+                {
+                    std::lock_guard<std::mutex> lock(m_mutex);
+                    m_purgedCount = messages;
+                }
+                signalSuccess(seq);
+            })
+            .onError([this, seq](const char* msg) { signalError(seq, msg); });
+    });
+    wait(seq, "purgeQueue");
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_purgedCount;
 }
 
 void Channel::removeQueue(const std::string& name, int flags) {

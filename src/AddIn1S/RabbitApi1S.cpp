@@ -301,6 +301,39 @@ void RabbitApi1S::basicPublishImpl(CallContext& ctx) {
     m_outgoingPriority = 0;
 }
 
+// --- Состояние очереди ---
+
+void RabbitApi1S::getQueueInfoImpl(CallContext& ctx) {
+    checkConnection();
+
+    const std::string queue = ctx.stringParamUtf8();
+    if (queue.empty()) {
+        throw std::runtime_error("GetQueueInfo: queue name is required");
+    }
+
+    // passive: брокер отвечает состоянием существующей очереди и не создаёт
+    // новую. Если очереди нет — ошибка от брокера, а не тихий ноль.
+    const auto stats = m_client->declareQueue(queue, true);
+
+    json info;
+    info["queue"] = queue;
+    info["messages"] = stats.messageCount;
+    info["consumers"] = stats.consumerCount;
+
+    ctx.setStringResult(m_converter.from_bytes(info.dump()));
+}
+
+void RabbitApi1S::purgeQueueImpl(CallContext& ctx) {
+    checkConnection();
+
+    const std::string queue = ctx.stringParamUtf8();
+    if (queue.empty()) {
+        throw std::runtime_error("PurgeQueue: queue name is required");
+    }
+
+    ctx.setIntResult(static_cast<int>(m_client->purgeQueue(queue)));
+}
+
 // --- Consume (legacy polling) ---
 
 void RabbitApi1S::basicConsumeImpl(CallContext& ctx) {

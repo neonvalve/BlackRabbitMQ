@@ -104,6 +104,15 @@ public:
     // Параметр requeue: в типовых решениях его обычно нет.
     void basicRejectImpl(CallContext& ctx);
 
+    // GetQueueInfo(queue) — состояние очереди со слов брокера, JSON:
+    // {"queue":"...","messages":N,"consumers":M}. Очередь не создаётся
+    // и не меняется: объявление идёт в passive-режиме.
+    void getQueueInfoImpl(CallContext& ctx);
+
+    // PurgeQueue(queue) — очистить очередь, вернуть число удалённых сообщений.
+    // Сама очередь и привязки остаются на месте.
+    void purgeQueueImpl(CallContext& ctx);
+
     // SetPublishMode(режим): "confirms" (по умолчанию) или "transactions".
     // Confirms — расширение RabbitMQ: быстрее вдвое. Transactions — класс tx
     // из спецификации AMQP 0.9.1, нужен на брокерах без поддержки confirms.

@@ -162,7 +162,7 @@ void Client::deleteExchange(const std::string& name, bool ifUnused) {
 
 // --- Queue ---
 
-void Client::declareQueue(
+Channel::QueueStats Client::declareQueue(
     const std::string& name,
     bool passive,
     bool durable,
@@ -171,7 +171,19 @@ void Client::declareQueue(
     const AMQP::Table& args)
 {
     try {
-        getOrCreateChannel().declareQueue(name, makeFlags(passive, durable, exclusive, autoDelete), args);
+        return getOrCreateChannel().declareQueue(
+            name, makeFlags(passive, durable, exclusive, autoDelete), args);
+    } catch (const std::exception& e) {
+        m_error = e.what();
+        throw;
+    }
+}
+
+uint32_t Client::purgeQueue(const std::string& name) {
+    try {
+        const uint32_t purged = getOrCreateChannel().purgeQueue(name);
+        BRMQ_LOG_INFO("PurgeQueue: '" + name + "', removed " + std::to_string(purged));
+        return purged;
     } catch (const std::exception& e) {
         m_error = e.what();
         throw;

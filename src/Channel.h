@@ -57,12 +57,23 @@ public:
     void removeExchange(const std::string& name, int flags = 0);
 
     // --- Queue ---
-    void declareQueue(
+    // Брокер отвечает на declare числом сообщений и потребителей. Раньше эти
+    // значения отбрасывались, хотя именно их спрашивают в эксплуатации:
+    // «сколько накопилось» и «есть ли кто-то на очереди».
+    struct QueueStats {
+        uint32_t messageCount = 0;
+        uint32_t consumerCount = 0;
+    };
+
+    QueueStats declareQueue(
         const std::string& name,
         int flags = 0,
         const AMQP::Table& args = {}
     );
     void removeQueue(const std::string& name, int flags = 0);
+    // Очищает очередь, не трогая её саму и привязки. Возвращает,
+    // сколько сообщений удалено.
+    uint32_t purgeQueue(const std::string& name);
 
     // --- Binding ---
     void bindQueue(
@@ -138,6 +149,10 @@ private:
     bool m_ready{false};
     std::string m_error;
     std::string m_consumerTag;
+    // Результаты последней операции с очередью: заполняются в потоке цикла
+    // до signalSuccess, читаются вызывающим после wait — под тем же мьютексом.
+    QueueStats m_queueStats;
+    uint32_t m_purgedCount{0};
     uint64_t m_seq{0};
     int m_timeoutMs{kDefaultTimeoutMs};
     ITaskRunner& m_runner;

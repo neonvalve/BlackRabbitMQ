@@ -70,7 +70,10 @@ public:
 
     // --- Queue ---
 
-    void declareQueue(
+    // Возвращает состояние очереди со слов брокера: сколько в ней сообщений
+    // и сколько потребителей. С passive = true это способ просто спросить,
+    // не создавая и не меняя очередь.
+    Channel::QueueStats declareQueue(
         const std::string& name,
         bool passive = false,
         bool durable = false,
@@ -78,6 +81,9 @@ public:
         bool autoDelete = false,
         const AMQP::Table& args = {}
     );
+
+    // Очищает очередь, не удаляя её и привязки. Возвращает число удалённых.
+    uint32_t purgeQueue(const std::string& name);
 
     void deleteQueue(
         const std::string& name,

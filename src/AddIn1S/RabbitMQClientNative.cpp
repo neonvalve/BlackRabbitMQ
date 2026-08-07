@@ -223,6 +223,8 @@ long RabbitMQClientNative::FindMethod(const WCHAR_T* wsMethodName) {
     if (std::u16string(name) == u"EnableExternalEvent")  return eMethEnableExternalEvent;
     if (std::u16string(name) == u"Reconnect")            return eMethReconnect;
     if (std::u16string(name) == u"SetPublishMode")      return eMethSetPublishMode;
+    if (std::u16string(name) == u"GetQueueInfo")        return eMethGetQueueInfo;
+    if (std::u16string(name) == u"PurgeQueue")          return eMethPurgeQueue;
 
     return -1;
 }
@@ -251,6 +253,8 @@ const WCHAR_T* RabbitMQClientNative::GetMethodName(const long lMethodNum, const 
         case eMethEnableExternalEvent:  return allocName(u"EnableExternalEvent");
         case eMethReconnect:            return allocName(u"Reconnect");
         case eMethSetPublishMode:       return allocName(u"SetPublishMode");
+        case eMethGetQueueInfo:         return allocName(u"GetQueueInfo");
+        case eMethPurgeQueue:           return allocName(u"PurgeQueue");
         default: return nullptr;
     }
 }
@@ -275,6 +279,8 @@ long RabbitMQClientNative::GetNParams(const long lMethodNum) {
         case eMethBasicReject:          return 2;  // tag + requeue (НОВЫЙ!)
         case eMethEnableExternalEvent:  return 1;  // bool enable
         case eMethSetPublishMode:       return 1;  // "confirms" | "transactions"
+        case eMethGetQueueInfo:
+        case eMethPurgeQueue:           return 1;  // имя очереди
         default: return 0;
     }
 }
@@ -353,6 +359,8 @@ bool RabbitMQClientNative::HasRetVal(const long lMethodNum) {
         case eMethGetPriority:
         case eMethGetRoutingKey:
         case eMethGetHeaders:
+        case eMethGetQueueInfo:
+        case eMethPurgeQueue:
             return true;
         default:
             return false;
@@ -421,6 +429,12 @@ bool RabbitMQClientNative::CallAsFunc(const long lMethodNum,
                                     paParams, lSizeArray, pvarRetValue);
         case eMethGetRoutingKey:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::getRoutingKeyImpl,
+                                    paParams, lSizeArray, pvarRetValue);
+        case eMethGetQueueInfo:
+            return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::getQueueInfoImpl,
+                                    paParams, lSizeArray, pvarRetValue);
+        case eMethPurgeQueue:
+            return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::purgeQueueImpl,
                                     paParams, lSizeArray, pvarRetValue);
         case eMethGetHeaders:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::getHeadersImpl,
