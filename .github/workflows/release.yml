@@ -35,20 +35,40 @@ jobs:
           fi
 
   build-linux:
-    name: Linux x86_64 (glibc 2.28)
+    # Отдельная сборка под каждое семейство систем вместо одного универсального
+    # бинарника. Причина: версии системных библиотек несовместимы между собой —
+    # libevent so.6 против so.7, OpenSSL 1.1 против 3, — и собранное на свежей
+    # Ubuntu не запускается на Astra Linux. Так каждая сборка линкуется ровно
+    # с тем, что стоит у клиента, без статических копий чужих библиотек.
+    name: Linux ${{ matrix.target }}
     needs: version-check
     runs-on: ubuntu-24.04
-    # Rocky Linux 8 — это glibc 2.28, libevent-2.1.so.6 и OpenSSL 1.1, то есть
-    # ровно то, что стоит в Astra Linux 1.7 и РЕД ОС 7-8, где чаще всего и
-    # работает сервер 1С под Linux. Сборка на ubuntu-24.04 требует glibc 2.39,
-    # на debian:11 — 2.29 (проверено: тоже мимо Astra с её 2.28).
-    container: rockylinux:8
+    container: ${{ matrix.image }}
+    strategy:
+      # Одна упавшая цель не должна отменять остальные: сборки независимы.
+      fail-fast: false
+      matrix:
+        include:
+          # glibc 2.28, libevent so.6, OpenSSL 1.1 — Astra Linux 1.7,
+          # РЕД ОС 7-8, RHEL/CentOS 8, Ubuntu 20.04
+          - target: astra17
+            image: rockylinux:8
+            glibc_max: "2.28"
+            install: dnf install -y gcc-c++ cmake make git libevent-devel openssl-devel libuuid-devel python3 binutils zip
+          # glibc 2.35, OpenSSL 3 — Ubuntu 22.04, Debian 12, RHEL 9
+          - target: ubuntu2204
+            image: ubuntu:22.04
+            glibc_max: "2.35"
+            install: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake pkg-config git libevent-dev libssl-dev uuid-dev python3 binutils zip
+          # glibc 2.39, OpenSSL 3 — Ubuntu 24.04 и новее
+          - target: ubuntu2404
+            image: ubuntu:24.04
+            glibc_max: "2.39"
+            install: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake pkg-config git libevent-dev libssl-dev uuid-dev python3 binutils zip
     steps:
       # Зависимости ставим до checkout: в голом образе нет ни git, ни компилятора.
       - name: Install system dependencies
-        run: |
-          dnf install -y gcc-c++ cmake make git libevent-devel openssl-devel \
-            libuuid-devel python3 binutils zip
+        run: ${{ matrix.install }}
 
       - uses: actions/checkout@v4
 
@@ -57,17 +77,16 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
           cmake --build build -- -j$(nproc)
 
-      # Проверка, ради которой всё и затевалось: требование выше 2.28 означает,
-      # что на Astra Linux библиотека не загрузится, а узнать об этом от клиента
-      # в момент внедрения — худший вариант.
-      - name: Проверить требования glibc
+      # Бинарник, требующий glibc выше целевой, молча не загрузится у клиента.
+      # Проверяем здесь, а не узнаём об этом при внедрении.
+      - name: Проверить совместимость
         run: |
           required=$(objdump -T build/libBlackRabbitMQ.so \
             | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -uV | tail -1)
-          echo "Максимальная требуемая версия: $required"
-          highest=$(printf '%s\nGLIBC_2.28\n' "$required" | sort -uV | tail -1)
-          if [ "$highest" != "GLIBC_2.28" ]; then
-            echo "Требуется $required — выше 2.28, на Astra Linux 1.7 не запустится" >&2
+          echo "Требует не выше: $required (цель — GLIBC_${{ matrix.glibc_max }})"
+          highest=$(printf '%s\nGLIBC_%s\n' "$required" "${{ matrix.glibc_max }}" | sort -uV | tail -1)
+          if [ "$highest" != "GLIBC_${{ matrix.glibc_max }}" ]; then
+            echo "Требуется $required — выше цели ${{ matrix.glibc_max }}" >&2
             exit 1
           fi
           echo "Зависимости: $(objdump -p build/libBlackRabbitMQ.so \
@@ -75,7 +94,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-x86_64
+          name: linux-${{ matrix.target }}
           path: build/libBlackRabbitMQ.so
           if-no-files-found: error
 
@@ -165,38 +184,44 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: linux-x86_64
-          path: artifacts/linux
+          path: artifacts
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-x86_64
-          path: artifacts/windows-x86_64
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-i386
-          path: artifacts/windows-i386
-
-      - name: Собрать ZIP компоненты
+      # MANIFEST.XML допускает только один бинарник на пару «ОС + архитектура»,
+      # поэтому Linux-сборки нельзя сложить в один архив: каждая цель — свой
+      # пакет. Windows-бинарники кладём в каждый, чтобы клиент качал один файл.
+      - name: Собрать пакеты для 1С
         run: |
+          version="${{ needs.version-check.outputs.version }}"
+          for dir in artifacts/linux-*; do
+            target="${dir#artifacts/linux-}"
+            output="dist/BlackRabbitMQ-${version}-${target}.zip"
+            python3 packaging/make_package.py \
+              --version "$version" \
+              --output "$output" \
+              --component Linux:x86_64:"$dir/libBlackRabbitMQ.so" \
+              --component Windows:x86_64:artifacts/windows-x86_64/BlackRabbitMQ.dll \
+              --component Windows:i386:artifacts/windows-i386/BlackRabbitMQ.dll
+          done
+          # Пакет без Linux — для тех, у кого только Windows.
           python3 packaging/make_package.py \
-            --version "${{ needs.version-check.outputs.version }}" \
-            --output "dist/BlackRabbitMQ-${{ needs.version-check.outputs.version }}.zip" \
-            --component Linux:x86_64:artifacts/linux/libBlackRabbitMQ.so \
+            --version "$version" \
+            --output "dist/BlackRabbitMQ-${version}-windows.zip" \
             --component Windows:x86_64:artifacts/windows-x86_64/BlackRabbitMQ.dll \
             --component Windows:i386:artifacts/windows-i386/BlackRabbitMQ.dll
-          unzip -l "dist/BlackRabbitMQ-${{ needs.version-check.outputs.version }}.zip"
+          ls -1 dist/
 
       # Пакет без нужного бинарника платформа подключит, а работать он не будет
       # именно у того клиента, чью разрядность забыли. Проверяем состав явно.
-      - name: Проверить состав пакета
+      - name: Проверить состав пакетов
         run: |
-          zip="dist/BlackRabbitMQ-${{ needs.version-check.outputs.version }}.zip"
-          for entry in MANIFEST.XML libBlackRabbitMQ.so BlackRabbitMQ-x86_64.dll BlackRabbitMQ-i386.dll; do
-            unzip -l "$zip" | grep -q "$entry" || { echo "В пакете нет $entry" >&2; exit 1; }
+          for zip in dist/*.zip; do
+            entries="MANIFEST.XML BlackRabbitMQ-x86_64.dll BlackRabbitMQ-i386.dll"
+            case "$zip" in *-windows.zip) ;; *) entries="$entries libBlackRabbitMQ.so" ;; esac
+            for entry in $entries; do
+              unzip -l "$zip" | grep -q "$entry" || { echo "В $zip нет $entry" >&2; exit 1; }
+            done
+            echo "$zip — состав в порядке"
           done
-          echo "Все бинарники на месте"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -213,16 +238,22 @@ jobs:
           cat > notes.md <<'NOTES'
           Внешняя Native API компонента для работы с RabbitMQ из 1С:Предприятие 8.3.
 
-          **В пакете** (один ZIP, внутри `MANIFEST.XML`):
+          **Какой пакет скачать.** Linux-сборки различаются версиями системных
+          библиотек, поэтому пакет выбирается по серверу 1С. Windows-бинарники
+          (x86_64 и i386) входят в каждый пакет — их выбирать не нужно.
 
-          | Платформа | Файл |
+          | Пакет | Для каких систем |
           |---|---|
-          | Windows x86_64 | `BlackRabbitMQ-x86_64.dll` |
-          | Windows i386 | `BlackRabbitMQ-i386.dll` |
-          | Linux x86_64 | `libBlackRabbitMQ.so` |
+          | `...-astra17.zip` | Astra Linux 1.7, РЕД ОС 7-8, RHEL/CentOS 8, Ubuntu 20.04 |
+          | `...-ubuntu2204.zip` | Ubuntu 22.04, Debian 12, RHEL 9 |
+          | `...-ubuntu2404.zip` | Ubuntu 24.04 и новее |
+          | `...-windows.zip` | только Windows |
 
-          Windows-сборки статически линкуют CRT и рассчитаны на Windows 7 /
-          Server 2008 R2 и новее. Linux-сборка собрана на Ubuntu 24.04.
+          Не уверены — берите `astra17`: у него самые низкие требования
+          (glibc 2.28, OpenSSL 1.1). Проверить свою систему: `ldd --version`.
+
+          Windows-сборки статически линкуют CRT и работают от Windows 7 /
+          Server 2008 R2 до Server 2022.
 
           **Установка.** Добавьте ZIP в конфигурацию как общий макет с видом
           «Двоичные данные», затем:
@@ -231,6 +262,9 @@ jobs:
           ПодключитьВнешнююКомпоненту("ОбщийМакет.BlackRabbitMQ", "BRMQ", ТипВнешнейКомпоненты.Native);
           Клиент = Новый("AddIn.BRMQ.BlackRabbitMQ");
           ```
+
+          Компоненту можно поставить и расширением конфигурации — тогда типовая
+          конфигурация не изменяется и остаётся на поддержке.
 
           **Лицензия.** Некоммерческое использование — PolyForm Noncommercial 1.0.0.
           Любое коммерческое использование — по платной лицензии: jsxlabor@gmail.com
