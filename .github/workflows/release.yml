@@ -35,21 +35,43 @@ jobs:
           fi
 
   build-linux:
-    name: Linux x86_64
+    name: Linux x86_64 (glibc 2.28)
     needs: version-check
     runs-on: ubuntu-24.04
+    # Rocky Linux 8 — это glibc 2.28, libevent-2.1.so.6 и OpenSSL 1.1, то есть
+    # ровно то, что стоит в Astra Linux 1.7 и РЕД ОС 7-8, где чаще всего и
+    # работает сервер 1С под Linux. Сборка на ubuntu-24.04 требует glibc 2.39,
+    # на debian:11 — 2.29 (проверено: тоже мимо Astra с её 2.28).
+    container: rockylinux:8
     steps:
-      - uses: actions/checkout@v4
-
+      # Зависимости ставим до checkout: в голом образе нет ни git, ни компилятора.
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libevent-dev libssl-dev uuid-dev
+          dnf install -y gcc-c++ cmake make git libevent-devel openssl-devel \
+            libuuid-devel python3 binutils zip
+
+      - uses: actions/checkout@v4
 
       - name: Build (Release)
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
           cmake --build build -- -j$(nproc)
+
+      # Проверка, ради которой всё и затевалось: требование выше 2.28 означает,
+      # что на Astra Linux библиотека не загрузится, а узнать об этом от клиента
+      # в момент внедрения — худший вариант.
+      - name: Проверить требования glibc
+        run: |
+          required=$(objdump -T build/libBlackRabbitMQ.so \
+            | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -uV | tail -1)
+          echo "Максимальная требуемая версия: $required"
+          highest=$(printf '%s\nGLIBC_2.28\n' "$required" | sort -uV | tail -1)
+          if [ "$highest" != "GLIBC_2.28" ]; then
+            echo "Требуется $required — выше 2.28, на Astra Linux 1.7 не запустится" >&2
+            exit 1
+          fi
+          echo "Зависимости: $(objdump -p build/libBlackRabbitMQ.so \
+            | grep NEEDED | awk '{print $2}' | tr '\n' ' ')"
 
       - uses: actions/upload-artifact@v4
         with:
