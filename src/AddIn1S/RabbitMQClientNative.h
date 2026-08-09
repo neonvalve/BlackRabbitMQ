@@ -98,8 +98,6 @@ public:
         eMethFlushPublish,
         // Пакетное получение: массив сообщений одним вызовом.
         eMethBasicConsumeMessages,
-        // Остановить доставку, сохранив буфер для дочитывания.
-        eMethStopConsume,
         eMethLast
     };
 

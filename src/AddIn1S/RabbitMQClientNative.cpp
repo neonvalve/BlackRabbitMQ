@@ -242,7 +242,6 @@ long RabbitMQClientNative::FindMethod(const WCHAR_T* wsMethodName) {
     if (std::u16string(name) == u"PurgeQueue")          return eMethPurgeQueue;
     if (std::u16string(name) == u"FlushPublish")        return eMethFlushPublish;
     if (std::u16string(name) == u"BasicConsumeMessages") return eMethBasicConsumeMessages;
-    if (std::u16string(name) == u"StopConsume")         return eMethStopConsume;
 
     return -1;
 }
@@ -275,7 +274,6 @@ const WCHAR_T* RabbitMQClientNative::GetMethodName(const long lMethodNum, const 
         case eMethPurgeQueue:           return allocName(u"PurgeQueue");
         case eMethFlushPublish:         return allocName(u"FlushPublish");
         case eMethBasicConsumeMessages: return allocName(u"BasicConsumeMessages");
-        case eMethStopConsume:          return allocName(u"StopConsume");
         default: return nullptr;
     }
 }
@@ -297,7 +295,6 @@ long RabbitMQClientNative::GetNParams(const long lMethodNum) {
         case eMethBasicAck:             return 2;  // tag + multiple (необязателен)
         case eMethBasicConsumeMessages: return 2;  // count + timeout
         case eMethBasicCancel:
-        case eMethStopConsume:
         case eMethFlushPublish:
         case eMethReconnect:            return 0;
         case eMethBasicReject:          return 2;  // tag + requeue (НОВЫЙ!)
@@ -431,8 +428,6 @@ bool RabbitMQClientNative::CallAsProc(const long lMethodNum,
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::basicRejectImpl, paParams, lSizeArray);
         case eMethSetPublishMode:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::setPublishModeImpl, paParams, lSizeArray);
-        case eMethStopConsume:
-            return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::stopConsumeImpl, paParams, lSizeArray);
         case eMethFlushPublish:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::flushPublishImpl, paParams, lSizeArray);
         case eMethDeleteQueue:

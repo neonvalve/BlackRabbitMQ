@@ -525,10 +525,10 @@ void RabbitApi1S::basicConsumeMessageImpl(CallContext& ctx) {
     if (!m_consumer) {
         throw std::runtime_error("No active consumers. Use BasicConsume() first");
     }
-    // После StopConsume подписка неактивна, но остаток в буфере обязан
-    // дочитываться — ради этого StopConsume и существует. Когда остаток
-    // кончился, это не ошибка, а «сообщений больше нет»: иначе цикл
-    // дочитывания в 1С пришлось бы завершать через исключение.
+    // После BasicCancel подписка неактивна, но остаток в буфере обязан
+    // дочитываться. Когда остаток кончился, это не ошибка, а «сообщений
+    // больше нет»: иначе цикл дочитывания в 1С пришлось бы завершать
+    // через исключение.
     const bool draining = !m_consumer->isActive();
     if (draining && !hasBufferedMessages()) {
         ctx.setBoolResult(false);
@@ -582,10 +582,10 @@ void RabbitApi1S::checkConsumer(const char* method) {
         throw std::runtime_error(std::string(method)
             + ": no active consumer. Use BasicConsume() first");
     }
-    // Активность подписки здесь не требуется: после StopConsume доставка
+    // Активность подписки здесь не требуется: после BasicCancel доставка
     // остановлена, но остаток обязан подтверждаться — иначе он вернётся
-    // в очередь, а StopConsume существует ровно для того, чтобы этого
-    // не случилось. Достаточно живого канала, доставившего сообщение.
+    // в очередь, ради чего отмена с сохранением буфера и делалась.
+    // Достаточно живого канала, доставившего сообщение.
     if (!m_consumer->canAck()) {
         throw std::runtime_error(std::string(method)
             + ": consumer channel is closed, message cannot be confirmed."
@@ -616,7 +616,7 @@ void RabbitApi1S::basicConsumeMessagesImpl(CallContext& ctx) {
     if (!m_consumer) {
         throw std::runtime_error("No active consumers. Use BasicConsume() first");
     }
-    // Дочитывание после StopConsume: пустой остаток — это конец, а не ошибка.
+    // Дочитывание после BasicCancel: пустой остаток — это конец, а не ошибка.
     if (!m_consumer->isActive() && !hasBufferedMessages()) {
         json empty;
         empty["count"] = 0;
@@ -682,22 +682,25 @@ void RabbitApi1S::basicRejectImpl(CallContext& ctx) {
 
 // --- Cancel ---
 
-void RabbitApi1S::stopConsumeImpl(CallContext& /*ctx*/) {
+void RabbitApi1S::basicCancelImpl(CallContext& /*ctx*/) {
     checkConnection();
     if (!m_consumer) return;
 
-    // В отличие от BasicCancel канал остаётся живым, а внутренняя очередь —
-    // нетронутой: то, что брокер уже отдал вперёд по prefetch, можно дочитать
-    // через BasicConsumeMessage и подтвердить. Иначе весь этот остаток
-    // возвращается в очередь и приходит повторно на следующем запуске.
+    // Семантика basic.cancel по спецификации AMQP: брокер прекращает слать
+    // новое, но канал остаётся живым, а то, что он уже отдал вперёд
+    // по prefetch, лежит в буфере. Этот остаток можно дочитать через
+    // BasicConsumeMessage и подтвердить — иначе он вернётся в очередь
+    // и придёт повторно на следующем запуске.
+    //
+    // Раньше метод закрывал канал и выбрасывал буфер: аккуратно завершить
+    // работу было невозможно в принципе, каждый цикл задания возвращал
+    // в очередь до prefetch сообщений.
     m_consumer->stopDelivery();
-    BRMQ_LOG_INFO("StopConsume: доставка остановлена, остаток можно дочитать");
-}
 
-void RabbitApi1S::basicCancelImpl(CallContext& /*ctx*/) {
-    checkConnection();
-    clear();
-    m_consumeParams = ConsumeParams{}; // отменённого потребителя не поднимаем
+    // Подписку не восстанавливаем после обрыва: отмена — решение вызывающего.
+    m_consumeParams = ConsumeParams{};
+    BRMQ_LOG_INFO("BasicCancel: доставка остановлена, остаток буфера "
+                  "можно дочитать и подтвердить");
 }
 
 // --- Reconnect ---

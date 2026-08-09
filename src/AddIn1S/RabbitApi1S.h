@@ -92,12 +92,10 @@ public:
     void enableExternalEvent(bool enable) { m_useExternalEvent = enable; }
     bool isExternalEventEnabled() const { return m_useExternalEvent; }
 
-    // StopConsume() — остановить доставку, сохранив буфер и канал.
-    // Остаток дочитывается через BasicConsumeMessage и подтверждается;
-    // без этого он возвращается в очередь и приходит повторно.
-    void stopConsumeImpl(CallContext& ctx);
-
-    // BasicCancel()
+    // BasicCancel() — отмена подписки по спецификации AMQP: брокер
+    // прекращает доставку, но канал и буфер остаются. Остаток дочитывается
+    // через BasicConsumeMessage и подтверждается — без этого он вернулся бы
+    // в очередь и пришёл повторно.
     void basicCancelImpl(CallContext& ctx);
 
     // Reconnect()
