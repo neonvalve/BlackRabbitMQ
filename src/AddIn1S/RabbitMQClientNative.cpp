@@ -342,6 +342,28 @@ bool RabbitMQClientNative::GetParamDefValue(const long lMethodNum, const long lP
                 return true;
             }
             break;
+        case eMethBasicAck:
+            // multiple. Без значения по умолчанию платформа отвечает
+            // «Недостаточно фактических параметров» на прежний вызов
+            // BasicAck(tag) — а он написан в коде всех существующих внедрений.
+            if (lParamNum == 1) {
+                TV_VT(pvarParamDefValue) = VTYPE_BOOL;
+                TV_BOOL(pvarParamDefValue) = false;
+                return true;
+            }
+            break;
+        case eMethBasicConsumeMessages:
+            if (lParamNum == 0) { // count
+                TV_VT(pvarParamDefValue) = VTYPE_I4;
+                TV_I4(pvarParamDefValue) = 100;
+                return true;
+            }
+            if (lParamNum == 1) { // timeout, мс
+                TV_VT(pvarParamDefValue) = VTYPE_I4;
+                TV_I4(pvarParamDefValue) = 1000;
+                return true;
+            }
+            break;
         case eMethBasicReject:
             if (lParamNum == 1) { // requeue (НОВЫЙ!)
                 TV_VT(pvarParamDefValue) = VTYPE_BOOL;
