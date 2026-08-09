@@ -53,6 +53,9 @@ public:
         // ("off", "error", "warn", "info", "debug").
         ePropLogFile,
         ePropLogLevel,
+        // Потолок внутренней очереди: страховка на случай noConfirm,
+        // где брокер игнорирует prefetch. Задаётся до BasicConsume.
+        ePropMaxQueuedMessages,
         ePropLast
     };
 

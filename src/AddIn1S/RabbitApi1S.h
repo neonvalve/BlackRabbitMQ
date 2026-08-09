@@ -31,10 +31,13 @@ namespace AddIn1S {
 //   - Внутри: std::unique_ptr, без ручного new/delete
 class RabbitApi1S : public Component {
 public:
-    // Потолок polling-очереди: дальше сообщения не копятся, а BasicConsumeMessage
-    // сообщает об отставании. Без потолка очередь растёт до OOM процесса 1С
-    // (особенно с noConfirm, где prefetch брокером не ограничен).
-    static constexpr size_t kMaxQueuedMessages = 10000;
+    // Потолок внутренней очереди по умолчанию. Штатный регулятор потока —
+    // prefetch: пока 1С не подтвердит, брокер больше не отдаст, и очередь
+    // физически не превысит prefetch. Потолок нужен для noAck, где брокер
+    // prefetch игнорирует по спецификации и сваливает очередь целиком:
+    // без него память rphost растёт до OOM, а это уронит чужие сеансы.
+    // Меняется свойством MaxQueuedMessages до BasicConsume.
+    static constexpr size_t kDefaultMaxQueuedMessages = 10000;
 
     // Глубина буфера внешних событий платформы. Значение по умолчанию рассчитано
     // на редкие уведомления: на потоке сообщений платформа начинает отказывать
@@ -144,8 +147,8 @@ public:
     void getMsgPropImpl(long propNum, CallContext& ctx);
     // SslCaFile / SslVerifyPeer / SslVerifyHostname — политика проверки
     // сертификата брокера. Читаются в момент Connect.
-    void setTlsPropImpl(long propNum, CallContext& ctx);
-    void getTlsPropImpl(long propNum, CallContext& ctx);
+    void setOptionPropImpl(long propNum, CallContext& ctx);
+    void getOptionPropImpl(long propNum, CallContext& ctx);
     // Пересобрать журнал после смены LogFile или LogLevel.
     void applyLogSettings();
 
@@ -189,6 +192,7 @@ private:
     std::unique_ptr<Consumer> m_consumer;
     ConsumeParams m_consumeParams;
     TlsOptions m_tls;
+    size_t m_maxQueuedMessages{kDefaultMaxQueuedMessages};
     int m_heartbeat{-1};    // -1 — как предложит брокер, 0 — выключить
 
     // Автоматическое переподключение

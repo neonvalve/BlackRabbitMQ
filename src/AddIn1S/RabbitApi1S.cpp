@@ -1,4 +1,4 @@
-#include "RabbitApi1S.h"
+﻿#include "RabbitApi1S.h"
 // Ради номеров свойств: TLS-настройки различаются по enum, а не по числу —
 // у соседних методов номера захардкожены, и это ровно та ошибка, которую
 // не хочется повторять.
@@ -95,7 +95,7 @@ void RabbitApi1S::applyLogSettings() {
 
 // --- Настройки TLS ---
 
-void RabbitApi1S::setTlsPropImpl(long propNum, CallContext& ctx) {
+void RabbitApi1S::setOptionPropImpl(long propNum, CallContext& ctx) {
     switch (propNum) {
         case RabbitMQClientNative::ePropSslCaFile:
             m_tls.caFile = ctx.stringParamUtf8();
@@ -109,6 +109,14 @@ void RabbitApi1S::setTlsPropImpl(long propNum, CallContext& ctx) {
         case RabbitMQClientNative::ePropHeartbeat:
             m_heartbeat = ctx.intParam();
             break;
+        case RabbitMQClientNative::ePropMaxQueuedMessages: {
+            const int value = ctx.intParam();
+            // Ноль или мусор трактуем как «вернуть умолчание»: очередь без
+            // потолка — это OOM процесса 1С, а не полезная настройка.
+            m_maxQueuedMessages = value > 0 ? static_cast<size_t>(value)
+                                            : kDefaultMaxQueuedMessages;
+            break;
+        }
         case RabbitMQClientNative::ePropAutoReconnect:
             m_autoReconnect.store(ctx.boolParam(), std::memory_order_release);
             break;
@@ -137,7 +145,7 @@ void RabbitApi1S::setTlsPropImpl(long propNum, CallContext& ctx) {
     }
 }
 
-void RabbitApi1S::getTlsPropImpl(long propNum, CallContext& ctx) {
+void RabbitApi1S::getOptionPropImpl(long propNum, CallContext& ctx) {
     switch (propNum) {
         case RabbitMQClientNative::ePropSslCaFile:
             ctx.setStringOrEmptyResult(m_converter.from_bytes(m_tls.caFile));
@@ -150,6 +158,9 @@ void RabbitApi1S::getTlsPropImpl(long propNum, CallContext& ctx) {
             break;
         case RabbitMQClientNative::ePropHeartbeat:
             ctx.setIntResult(m_heartbeat);
+            break;
+        case RabbitMQClientNative::ePropMaxQueuedMessages:
+            ctx.setIntResult(static_cast<int>(m_maxQueuedMessages));
             break;
         case RabbitMQClientNative::ePropAutoReconnect:
             ctx.setBoolResult(m_autoReconnect.load(std::memory_order_acquire));
@@ -422,13 +433,19 @@ void RabbitApi1S::startConsumer(const ConsumeParams& params) {
             }
 
             std::lock_guard<std::mutex> lock(m_queueMutex);
-            if (m_messageQueue.size() >= kMaxQueuedMessages) {
+            if (m_messageQueue.size() >= m_maxQueuedMessages) {
                 // 1С не успевает читать (или включён noConfirm, и брокер шлёт
                 // без ограничения prefetch). Явная ошибка лучше, чем рост до OOM.
                 if (m_consumerError.empty()) {
-                    m_consumerError = "Message queue overflow ("
-                        + std::to_string(kMaxQueuedMessages)
-                        + " messages): BasicConsumeMessage is not called often enough";
+                    m_consumerError = "Внутренняя очередь компоненты переполнена ("
+                        + std::to_string(m_maxQueuedMessages) + " сообщений). "
+                        + (m_consumeParams.noConfirm
+                            ? "Включён режим без подтверждения (noConfirm), в нём брокер "
+                              "игнорирует prefetch и отдаёт очередь целиком. Включите "
+                              "подтверждение или поднимите MaxQueuedMessages."
+                            : "1С не успевает забирать: уменьшите prefetch, ускорьте "
+                              "обработку или поднимите MaxQueuedMessages.");
+                    BRMQ_LOG_ERROR(m_consumerError);
                 }
                 return;
             }
