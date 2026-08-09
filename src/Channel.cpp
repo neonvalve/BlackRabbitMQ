@@ -462,8 +462,23 @@ std::string Channel::consume(
 // Ответа брокер не присылает, но кадр всё равно пишется в соединение —
 // из потока цикла. Вызов из onMessage исполнится на месте (см. ITaskRunner).
 
-void Channel::ack(uint64_t deliveryTag) {
-    m_runner.runInLoop([&]() { m_channel->ack(deliveryTag); });
+void Channel::ack(uint64_t deliveryTag, bool multiple) {
+    const int flags = multiple ? AMQP::multiple : 0;
+
+    if (m_runner.inLoopThread()) {
+        m_channel->ack(deliveryTag, flags);
+        return;
+    }
+
+    // Подтверждение не ждёт ответа брокера, поэтому не ждём и поток цикла:
+    // синхронный прыжок между потоками на каждое сообщение стоил дороже
+    // самой отправки кадра и упирал приём в тысячу сообщений в секунду.
+    // Задачи исполняются в порядке постановки, а деструктор канала идёт
+    // тем же путём — значит все поставленные ack успеют выполниться
+    // до уничтожения канала.
+    m_runner.post([this, deliveryTag, flags]() {
+        if (m_channel) m_channel->ack(deliveryTag, flags);
+    });
 }
 
 void Channel::reject(uint64_t deliveryTag, bool requeue) {

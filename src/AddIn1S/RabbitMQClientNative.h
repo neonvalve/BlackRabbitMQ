@@ -85,6 +85,8 @@ public:
         eMethPurgeQueue,
         // Дождаться подтверждений пакетной публикации.
         eMethFlushPublish,
+        // Пакетное получение: массив сообщений одним вызовом.
+        eMethBasicConsumeMessages,
         eMethLast
     };
 

@@ -226,6 +226,7 @@ long RabbitMQClientNative::FindMethod(const WCHAR_T* wsMethodName) {
     if (std::u16string(name) == u"GetQueueInfo")        return eMethGetQueueInfo;
     if (std::u16string(name) == u"PurgeQueue")          return eMethPurgeQueue;
     if (std::u16string(name) == u"FlushPublish")        return eMethFlushPublish;
+    if (std::u16string(name) == u"BasicConsumeMessages") return eMethBasicConsumeMessages;
 
     return -1;
 }
@@ -257,6 +258,7 @@ const WCHAR_T* RabbitMQClientNative::GetMethodName(const long lMethodNum, const 
         case eMethGetQueueInfo:         return allocName(u"GetQueueInfo");
         case eMethPurgeQueue:           return allocName(u"PurgeQueue");
         case eMethFlushPublish:         return allocName(u"FlushPublish");
+        case eMethBasicConsumeMessages: return allocName(u"BasicConsumeMessages");
         default: return nullptr;
     }
 }
@@ -273,9 +275,10 @@ long RabbitMQClientNative::GetNParams(const long lMethodNum) {
         case eMethDeleteQueue:
         case eMethUnbindQueue:          return 3;
         case eMethDeleteExchange:       return 2;
-        case eMethBasicAck:
         case eMethSetPriority:
         case eMethSleepNative:          return 1;
+        case eMethBasicAck:             return 2;  // tag + multiple (необязателен)
+        case eMethBasicConsumeMessages: return 2;  // count + timeout
         case eMethBasicCancel:
         case eMethFlushPublish:
         case eMethReconnect:            return 0;
@@ -364,6 +367,7 @@ bool RabbitMQClientNative::HasRetVal(const long lMethodNum) {
         case eMethGetHeaders:
         case eMethGetQueueInfo:
         case eMethPurgeQueue:
+        case eMethBasicConsumeMessages:
             return true;
         default:
             return false;
@@ -440,6 +444,9 @@ bool RabbitMQClientNative::CallAsFunc(const long lMethodNum,
                                     paParams, lSizeArray, pvarRetValue);
         case eMethPurgeQueue:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::purgeQueueImpl,
+                                    paParams, lSizeArray, pvarRetValue);
+        case eMethBasicConsumeMessages:
+            return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::basicConsumeMessagesImpl,
                                     paParams, lSizeArray, pvarRetValue);
         case eMethGetHeaders:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::getHeadersImpl,

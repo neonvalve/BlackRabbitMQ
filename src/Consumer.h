@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <atomic>
 #include <functional>
@@ -56,7 +56,8 @@ public:
     const std::string& queueName() const noexcept { return m_queueName; }
 
     // Ack/Reject через канал потребителя (обязательно тот же канал!)
-    void ack(uint64_t deliveryTag);
+    // multiple: подтвердить всё до deliveryTag включительно.
+    void ack(uint64_t deliveryTag, bool multiple = false);
     void reject(uint64_t deliveryTag, bool requeue = false);
 
 private:

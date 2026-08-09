@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Component.h"
 #include "CallContext.h"
@@ -97,8 +97,14 @@ public:
     // с прежними параметрами. Тег потребителя брокер присвоит новый.
     void reconnectImpl(CallContext& ctx);
 
-    // BasicAck(deliveryTag)
+    // BasicAck(deliveryTag, multiple = Ложь)
+    // multiple: подтвердить всё до deliveryTag включительно — один кадр
+    // вместо N вызовов, ради этого и делалось пакетное получение.
     void basicAckImpl(CallContext& ctx);
+
+    // BasicConsumeMessages(count, timeout) — массив сообщений одним вызовом.
+    // Возвращает JSON: {"count":N,"lastTag":T,"messages":[...]}.
+    void basicConsumeMessagesImpl(CallContext& ctx);
 
     // BasicReject(deliveryTag, requeue)
     // Параметр requeue: в типовых решениях его обычно нет.

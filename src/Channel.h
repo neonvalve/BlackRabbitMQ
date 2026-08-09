@@ -134,7 +134,10 @@ public:
     );
 
     // --- Ack / Reject ---
-    void ack(uint64_t deliveryTag);
+    // multiple: подтвердить всё до deliveryTag включительно — одним кадром
+    // вместо N. На пакетной обработке это разница в разы, потому что каждое
+    // одиночное подтверждение стоит перехода через границу платформы.
+    void ack(uint64_t deliveryTag, bool multiple = false);
     void reject(uint64_t deliveryTag, bool requeue);
 
     // Прямой доступ к AMQP-каналу для продвинутых сценариев.

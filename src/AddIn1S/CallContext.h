@@ -39,6 +39,10 @@ public:
 
     // --- Чтение параметров ---
 
+    // Есть ли ещё непрочитанный параметр. Нужно для методов, у которых
+    // параметр добавился позже: старый код 1С вызывает их без него.
+    bool hasMore() const { return m_index < m_count; }
+
     tVariant* currentParam() {
         if (m_index >= m_count) {
             throw std::runtime_error("Extra parameter requested: " + std::to_string(m_index));

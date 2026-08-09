@@ -1,4 +1,4 @@
-#include "Consumer.h"
+﻿#include "Consumer.h"
 #include "Channel.h"
 #include "Message.h"
 
@@ -77,9 +77,9 @@ bool Consumer::canAck() const noexcept {
     return m_active.load(std::memory_order_acquire) && m_channel && m_channel->usable();
 }
 
-void Consumer::ack(uint64_t deliveryTag) {
+void Consumer::ack(uint64_t deliveryTag, bool multiple) {
     if (m_channel && m_channel->usable()) {
-        m_channel->ack(deliveryTag);
+        m_channel->ack(deliveryTag, multiple);
     }
 }
 

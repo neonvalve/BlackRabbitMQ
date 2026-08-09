@@ -520,8 +520,71 @@ void RabbitApi1S::basicAckImpl(CallContext& ctx) {
     if (tag == 0) {
         throw std::runtime_error("Message tag cannot be empty!");
     }
+    // Второй параметр необязателен: старый код 1С вызывает BasicAck(tag)
+    // и должен продолжать работать.
+    const bool multiple = ctx.hasMore() ? ctx.boolParam() : false;
     checkConsumer("BasicAck");
-    m_consumer->ack(tag);
+    m_consumer->ack(tag, multiple);
+}
+
+// Пакетное получение: одним вызовом отдаём всё, что уже лежит во внутренней
+// очереди. Каждый переход через границу платформы стоит дорого, и на потоке
+// поштучная выдача упирала приём в тысячу сообщений в секунду при том, что
+// брокер отдаёт их пачками по prefetch.
+void RabbitApi1S::basicConsumeMessagesImpl(CallContext& ctx) {
+    checkConnection();
+
+    if (!m_consumer || !m_consumer->isActive()) {
+        throw std::runtime_error("No active consumers. Use BasicConsume() first");
+    }
+
+    int maxCount = ctx.intParam();
+    if (maxCount <= 0) maxCount = 100;
+    const int timeout = ctx.intParam();
+
+    json batch = json::array();
+    uint64_t lastTag = 0;
+
+    {
+        std::unique_lock<std::mutex> lock(m_queueMutex);
+
+        if (m_messageQueue.empty()) {
+            if (!m_consumerError.empty()) {
+                std::string err = std::move(m_consumerError);
+                m_consumerError.clear();
+                throw std::runtime_error(err);
+            }
+            // Ждём только если очередь пуста: когда сообщения уже есть,
+            // забирать их надо немедленно, а не по таймауту.
+            m_cvDataArrived.wait_for(lock, std::chrono::milliseconds(timeout > 0 ? timeout : 0),
+                                     [this] { return !m_messageQueue.empty(); });
+        }
+
+        while (!m_messageQueue.empty() && static_cast<int>(batch.size()) < maxCount) {
+            const Message& msg = m_messageQueue.front();
+            json item;
+            item["body"] = msg.body;
+            item["deliveryTag"] = msg.deliveryTag;
+            item["routingKey"] = msg.routingKey;
+            item["redelivered"] = msg.redelivered;
+            item["correlationId"] = msg.props.correlationId;
+            item["messageId"] = msg.props.messageId;
+            batch.push_back(std::move(item));
+
+            lastTag = msg.deliveryTag;
+            m_lastMessage = msg;
+            m_messageQueue.pop();
+        }
+    }
+
+    json result;
+    result["count"] = batch.size();
+    // Номер последнего сообщения — чтобы подтвердить всю пачку одним
+    // BasicAck(lastTag, Истина) вместо вызова на каждое сообщение.
+    result["lastTag"] = lastTag;
+    result["messages"] = std::move(batch);
+
+    ctx.setStringResult(m_converter.from_bytes(result.dump()));
 }
 
 void RabbitApi1S::basicRejectImpl(CallContext& ctx) {
