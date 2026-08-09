@@ -1,6 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.16)
 project(BlackRabbitMQ
-    VERSION 0.0.4
+    VERSION 0.0.5
     DESCRIPTION "Компонента RabbitMQ для 1С:Предприятие: C++17/20, RAII, событийная модель"
     LANGUAGES CXX
 )
