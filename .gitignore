@@ -46,3 +46,7 @@ reference/
 /demo/
 /tests/
 /docs/*.md
+
+# Скриншоты и заметки по ходу работы
+/Screenshot*.png
+/*.png
