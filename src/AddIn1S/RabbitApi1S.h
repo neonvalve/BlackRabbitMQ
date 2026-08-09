@@ -92,6 +92,11 @@ public:
     void enableExternalEvent(bool enable) { m_useExternalEvent = enable; }
     bool isExternalEventEnabled() const { return m_useExternalEvent; }
 
+    // StopConsume() — остановить доставку, сохранив буфер и канал.
+    // Остаток дочитывается через BasicConsumeMessage и подтверждается;
+    // без этого он возвращается в очередь и приходит повторно.
+    void stopConsumeImpl(CallContext& ctx);
+
     // BasicCancel()
     void basicCancelImpl(CallContext& ctx);
 
@@ -181,6 +186,7 @@ private:
     void notifyConnectionEvent(const char16_t* event, const std::string& detail);
 
     void checkConnection();
+    bool hasBufferedMessages();
     // Ack/Reject возможны только пока жив потребитель: подтверждать нужно
     // на канале, доставившем сообщение.
     void checkConsumer(const char* method);

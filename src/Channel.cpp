@@ -1,4 +1,4 @@
-#include "Channel.h"
+﻿#include "Channel.h"
 #include "Message.h"
 
 #include <chrono>
@@ -461,6 +461,17 @@ std::string Channel::consume(
 
 // Ответа брокер не присылает, но кадр всё равно пишется в соединение —
 // из потока цикла. Вызов из onMessage исполнится на месте (см. ITaskRunner).
+
+void Channel::cancelConsumer(const std::string& consumerTag) {
+    if (consumerTag.empty()) return;
+    const uint64_t seq = beginOp();
+    m_runner.runInLoop([&]() {
+        m_channel->cancel(consumerTag)
+            .onSuccess([this, seq](const std::string&) { signalSuccess(seq); })
+            .onError([this, seq](const char* msg) { signalError(seq, msg); });
+    });
+    wait(seq, "cancelConsumer");
+}
 
 void Channel::ack(uint64_t deliveryTag, bool multiple) {
     const int flags = multiple ? AMQP::multiple : 0;

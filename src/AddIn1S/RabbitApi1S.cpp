@@ -30,6 +30,46 @@ std::u16string toU16(const std::string& utf8) {
     return converter.from_bytes(utf8);
 }
 
+// Заголовки AMQP в JSON. Вынесено из lastMessageHeaders(), чтобы одно
+// и то же представление получали все режимы приёма.
+json headersToJson(const AMQP::Table& table) {
+    json result = json::object();
+    AMQP::Table& tbl = const_cast<AMQP::Table&>(table);
+    for (const std::string& key : tbl.keys()) {
+        const AMQP::Field& field = tbl.get(key);
+        if (field.isInteger())      result[key] = static_cast<int64_t>(field);
+        else if (field.isDecimal()) result[key] = static_cast<double>(field);
+        else if (field.isString())  result[key] = static_cast<const std::string&>(field);
+        else if (field.isBoolean()) result[key] = static_cast<bool>(static_cast<int64_t>(field));
+    }
+    return result;
+}
+
+// Полное представление сообщения. Раньше событийный и пакетный режимы
+// собирали JSON каждый по-своему и теряли разные поля: в пакетном не было
+// приоритета и заголовков, в событийном — заголовков и половины свойств.
+// Набор данных не должен зависеть от способа получения.
+json messageToJson(const Message& msg) {
+    json item;
+    item["body"] = msg.body;
+    item["deliveryTag"] = msg.deliveryTag;
+    item["redelivered"] = msg.redelivered;
+    item["routingKey"] = msg.routingKey;
+    item["priority"] = msg.priority;
+    item["headers"] = headersToJson(msg.headers);
+    item["correlationId"] = msg.props.correlationId;
+    item["messageId"] = msg.props.messageId;
+    item["type"] = msg.props.typeName;
+    item["appId"] = msg.props.appId;
+    item["userId"] = msg.props.userId;
+    item["clusterId"] = msg.props.clusterId;
+    item["contentType"] = msg.props.contentType;
+    item["contentEncoding"] = msg.props.contentEncoding;
+    item["expiration"] = msg.props.expiration;
+    item["replyTo"] = msg.props.replyTo;
+    return item;
+}
+
 } // namespace
 
 RabbitApi1S::RabbitApi1S()
@@ -162,6 +202,14 @@ void RabbitApi1S::getOptionPropImpl(long propNum, CallContext& ctx) {
         case RabbitMQClientNative::ePropMaxQueuedMessages:
             ctx.setIntResult(static_cast<int>(m_maxQueuedMessages));
             break;
+        case RabbitMQClientNative::ePropRedelivered:
+            ctx.setBoolResult(m_lastMessage.redelivered);
+            break;
+        case RabbitMQClientNative::ePropEventsRejected: {
+            std::lock_guard<std::mutex> lock(m_queueMutex);
+            ctx.setIntResult(static_cast<int>(m_eventsDropped));
+            break;
+        }
         case RabbitMQClientNative::ePropAutoReconnect:
             ctx.setBoolResult(m_autoReconnect.load(std::memory_order_acquire));
             break;
@@ -391,17 +439,7 @@ void RabbitApi1S::startConsumer(const ConsumeParams& params) {
         [this](const Message& msg) {
             if (m_useExternalEvent && m_addin) {
                 // Событийная модель: отправить ExternalEvent в 1С
-                json eventData;
-                eventData["body"] = msg.body;
-                eventData["deliveryTag"] = msg.deliveryTag;
-                eventData["routingKey"] = msg.routingKey;
-                eventData["priority"] = msg.priority;
-                eventData["redelivered"] = msg.redelivered;
-                eventData["correlationId"] = msg.props.correlationId;
-                eventData["messageId"] = msg.props.messageId;
-                eventData["contentType"] = msg.props.contentType;
-
-                std::u16string u16data = toU16(eventData.dump());
+                std::u16string u16data = toU16(messageToJson(msg).dump());
                 const bool accepted = m_addin->ExternalEvent(
                     const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(u"BlackRabbitMQ")),
                     const_cast<WCHAR_T*>(reinterpret_cast<const WCHAR_T*>(u"MessageReceived")),
@@ -415,17 +453,28 @@ void RabbitApi1S::startConsumer(const ConsumeParams& params) {
                 // доставленным, а до кода 1С оно не доходило. Замерено на
                 // потоке в 50 сообщений: доходило одно.
                 if (!accepted) {
-                    std::lock_guard<std::mutex> lock(m_queueMutex);
-                    ++m_eventsDropped;
-                    // В журнал — обязательно: без него потеря выглядит как
-                    // «компонента иногда не доставляет сообщения».
-                    BRMQ_LOG_WARN("External event rejected by 1C (buffer overflow), dropped "
-                                  + std::to_string(m_eventsDropped)
-                                  + " message(s), deliveryTag " + std::to_string(msg.deliveryTag));
-                    m_consumerError = "External event buffer overflow: "
-                        + std::to_string(m_eventsDropped)
-                        + " message(s) not delivered to 1C. Reduce prefetch, "
-                          "speed up the event handler or switch to polling mode";
+                    {
+                        std::lock_guard<std::mutex> lock(m_queueMutex);
+                        ++m_eventsDropped;
+                        m_consumerError = "Платформа отказала в приёме события ("
+                            + std::to_string(m_eventsDropped) + " раз). Сообщения "
+                            "возвращены в очередь. Уменьшите prefetch, ускорьте "
+                            "обработчик события или перейдите на режим опроса";
+                    }
+                    BRMQ_LOG_WARN("Платформа отказала в приёме события, сообщение "
+                                  + std::to_string(msg.deliveryTag)
+                                  + " возвращено в очередь (всего отказов: "
+                                  + std::to_string(m_eventsDropped) + ")");
+
+                    // Возвращаем сообщение брокеру. Раньше оно просто
+                    // отбрасывалось и навсегда оставалось неподтверждённым,
+                    // занимая слот prefetch: после prefetch таких отказов
+                    // доставка прекращалась совсем — потребитель жив, событий
+                    // нет, а 1С об этом не узнавала, потому что в событийном
+                    // режиме GetLastError никто не читает.
+                    // reject исполняется в этом же потоке цикла и ответа
+                    // не ждёт, поэтому вызывать его отсюда безопасно.
+                    if (m_consumer) m_consumer->reject(msg.deliveryTag, true);
                 }
                 // В polling-очередь не дублируем: в событийном режиме её никто
                 // не читает, и она росла бы до исчерпания памяти процесса 1С.
@@ -473,8 +522,17 @@ void RabbitApi1S::startConsumer(const ConsumeParams& params) {
 void RabbitApi1S::basicConsumeMessageImpl(CallContext& ctx) {
     checkConnection();
 
-    if (!m_consumer || !m_consumer->isActive()) {
+    if (!m_consumer) {
         throw std::runtime_error("No active consumers. Use BasicConsume() first");
+    }
+    // После StopConsume подписка неактивна, но остаток в буфере обязан
+    // дочитываться — ради этого StopConsume и существует. Когда остаток
+    // кончился, это не ошибка, а «сообщений больше нет»: иначе цикл
+    // дочитывания в 1С пришлось бы завершать через исключение.
+    const bool draining = !m_consumer->isActive();
+    if (draining && !hasBufferedMessages()) {
+        ctx.setBoolResult(false);
+        return;
     }
 
     ctx.skipParam();
@@ -520,10 +578,14 @@ void RabbitApi1S::basicConsumeMessageImpl(CallContext& ctx) {
 // поэтому — только через Consumer, который этим каналом владеет.
 
 void RabbitApi1S::checkConsumer(const char* method) {
-    if (!m_consumer || !m_consumer->isActive()) {
+    if (!m_consumer) {
         throw std::runtime_error(std::string(method)
             + ": no active consumer. Use BasicConsume() first");
     }
+    // Активность подписки здесь не требуется: после StopConsume доставка
+    // остановлена, но остаток обязан подтверждаться — иначе он вернётся
+    // в очередь, а StopConsume существует ровно для того, чтобы этого
+    // не случилось. Достаточно живого канала, доставившего сообщение.
     if (!m_consumer->canAck()) {
         throw std::runtime_error(std::string(method)
             + ": consumer channel is closed, message cannot be confirmed."
@@ -551,8 +613,17 @@ void RabbitApi1S::basicAckImpl(CallContext& ctx) {
 void RabbitApi1S::basicConsumeMessagesImpl(CallContext& ctx) {
     checkConnection();
 
-    if (!m_consumer || !m_consumer->isActive()) {
+    if (!m_consumer) {
         throw std::runtime_error("No active consumers. Use BasicConsume() first");
+    }
+    // Дочитывание после StopConsume: пустой остаток — это конец, а не ошибка.
+    if (!m_consumer->isActive() && !hasBufferedMessages()) {
+        json empty;
+        empty["count"] = 0;
+        empty["lastTag"] = 0;
+        empty["messages"] = json::array();
+        ctx.setStringResult(m_converter.from_bytes(empty.dump()));
+        return;
     }
 
     int maxCount = ctx.intParam();
@@ -579,14 +650,7 @@ void RabbitApi1S::basicConsumeMessagesImpl(CallContext& ctx) {
 
         while (!m_messageQueue.empty() && static_cast<int>(batch.size()) < maxCount) {
             const Message& msg = m_messageQueue.front();
-            json item;
-            item["body"] = msg.body;
-            item["deliveryTag"] = msg.deliveryTag;
-            item["routingKey"] = msg.routingKey;
-            item["redelivered"] = msg.redelivered;
-            item["correlationId"] = msg.props.correlationId;
-            item["messageId"] = msg.props.messageId;
-            batch.push_back(std::move(item));
+            batch.push_back(messageToJson(msg));
 
             lastTag = msg.deliveryTag;
             m_lastMessage = msg;
@@ -617,6 +681,18 @@ void RabbitApi1S::basicRejectImpl(CallContext& ctx) {
 }
 
 // --- Cancel ---
+
+void RabbitApi1S::stopConsumeImpl(CallContext& /*ctx*/) {
+    checkConnection();
+    if (!m_consumer) return;
+
+    // В отличие от BasicCancel канал остаётся живым, а внутренняя очередь —
+    // нетронутой: то, что брокер уже отдал вперёд по prefetch, можно дочитать
+    // через BasicConsumeMessage и подтвердить. Иначе весь этот остаток
+    // возвращается в очередь и приходит повторно на следующем запуске.
+    m_consumer->stopDelivery();
+    BRMQ_LOG_INFO("StopConsume: доставка остановлена, остаток можно дочитать");
+}
 
 void RabbitApi1S::basicCancelImpl(CallContext& /*ctx*/) {
     checkConnection();
@@ -855,6 +931,11 @@ void RabbitApi1S::getMsgPropImpl(long propNum, CallContext& ctx) {
 
 // --- Helpers ---
 
+bool RabbitApi1S::hasBufferedMessages() {
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+    return !m_messageQueue.empty();
+}
+
 void RabbitApi1S::clear() {
     m_consumer.reset(nullptr);
     std::lock_guard<std::mutex> lock(m_queueMutex);
@@ -885,16 +966,7 @@ AMQP::Table RabbitApi1S::headersFromJson(const std::string& propsJson, bool /*fo
 }
 
 std::string RabbitApi1S::lastMessageHeaders() {
-    json hdr = json::object();
-    AMQP::Table& tbl = m_lastMessage.headers;
-    for (const std::string& key : tbl.keys()) {
-        const AMQP::Field& field = tbl.get(key);
-        if (field.isInteger())      hdr[key] = static_cast<int64_t>(field);
-        else if (field.isDecimal()) hdr[key] = static_cast<double>(field);
-        else if (field.isString())  hdr[key] = static_cast<const std::string&>(field);
-        else if (field.isBoolean()) hdr[key] = static_cast<bool>(static_cast<int64_t>(field));
-    }
-    return hdr.dump();
+    return headersToJson(m_lastMessage.headers).dump();
 }
 
 } // namespace AddIn1S

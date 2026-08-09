@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "TaskRunner.h"
 
@@ -132,6 +132,11 @@ public:
         std::function<void(const Message&, uint64_t, bool)> onMessage,
         std::function<void(const std::string&)> onCancelled = nullptr
     );
+
+    // Отменить подписку, не закрывая канал: брокер перестаёт слать новое,
+    // но уже полученное можно дочитать и подтвердить. Закрытие канала
+    // (cancel у Consumer) такой возможности не оставляет.
+    void cancelConsumer(const std::string& consumerTag);
 
     // --- Ack / Reject ---
     // multiple: подтвердить всё до deliveryTag включительно — одним кадром

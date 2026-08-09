@@ -74,7 +74,10 @@ void Consumer::start(
 }
 
 bool Consumer::canAck() const noexcept {
-    return m_active.load(std::memory_order_acquire) && m_channel && m_channel->usable();
+    // Активность подписки здесь не важна: после stopDelivery() доставка
+    // остановлена, но остаток обязан подтверждаться — иначе он вернётся
+    // в очередь, ради чего всё и затевалось.
+    return m_channel && m_channel->usable();
 }
 
 void Consumer::ack(uint64_t deliveryTag, bool multiple) {
@@ -87,6 +90,14 @@ void Consumer::reject(uint64_t deliveryTag, bool requeue) {
     if (m_channel && m_channel->usable()) {
         m_channel->reject(deliveryTag, requeue);
     }
+}
+
+void Consumer::stopDelivery() {
+    if (!m_channel) return;
+    const std::string tag = m_tag;
+    m_active.store(false, std::memory_order_release);
+    if (!tag.empty()) m_channel->cancelConsumer(tag);
+    // Канал остаётся живым: по нему пойдут подтверждения остатка.
 }
 
 void Consumer::cancel() {

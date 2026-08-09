@@ -71,6 +71,8 @@ long RabbitMQClientNative::FindProp(const WCHAR_T* wsPropName) {
     if (std::u16string(name) == u"LogFile") return ePropLogFile;
     if (std::u16string(name) == u"LogLevel") return ePropLogLevel;
     if (std::u16string(name) == u"MaxQueuedMessages") return ePropMaxQueuedMessages;
+    if (std::u16string(name) == u"Redelivered") return ePropRedelivered;
+    if (std::u16string(name) == u"EventsRejected") return ePropEventsRejected;
 
     return -1;
 }
@@ -107,6 +109,8 @@ const WCHAR_T* RabbitMQClientNative::GetPropName(long lPropNum, long /*lPropAlia
         case ePropLogFile:          return allocName(u"LogFile");
         case ePropLogLevel:         return allocName(u"LogLevel");
         case ePropMaxQueuedMessages: return allocName(u"MaxQueuedMessages");
+        case ePropRedelivered:      return allocName(u"Redelivered");
+        case ePropEventsRejected:   return allocName(u"EventsRejected");
         default: return nullptr;
     }
 }
@@ -140,7 +144,9 @@ bool RabbitMQClientNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal
         case ePropReconnectCount:
         case ePropLogFile:
         case ePropLogLevel:
-        case ePropMaxQueuedMessages: {
+        case ePropMaxQueuedMessages:
+        case ePropRedelivered:
+        case ePropEventsRejected: {
             CallContext ctx(m_impl->memoryManager(), nullptr, 0, pvarPropVal);
             m_impl->getOptionPropImpl(lPropNum, ctx);
             return true;
@@ -191,8 +197,13 @@ bool RabbitMQClientNative::IsPropReadable(const long /*lPropNum*/) {
 }
 
 bool RabbitMQClientNative::IsPropWritable(const long lPropNum) {
-    // ReconnectCount — счётчик компоненты, писать его извне бессмысленно.
-    if (lPropNum == ePropReconnectCount) return false;
+    // Счётчики и признаки полученного сообщения — только на чтение:
+    // писать их извне бессмысленно.
+    if (lPropNum == ePropReconnectCount
+        || lPropNum == ePropRedelivered
+        || lPropNum == ePropEventsRejected) {
+        return false;
+    }
     return lPropNum >= ePropCorrelationId && lPropNum < ePropLast;
 }
 
@@ -231,6 +242,7 @@ long RabbitMQClientNative::FindMethod(const WCHAR_T* wsMethodName) {
     if (std::u16string(name) == u"PurgeQueue")          return eMethPurgeQueue;
     if (std::u16string(name) == u"FlushPublish")        return eMethFlushPublish;
     if (std::u16string(name) == u"BasicConsumeMessages") return eMethBasicConsumeMessages;
+    if (std::u16string(name) == u"StopConsume")         return eMethStopConsume;
 
     return -1;
 }
@@ -263,6 +275,7 @@ const WCHAR_T* RabbitMQClientNative::GetMethodName(const long lMethodNum, const 
         case eMethPurgeQueue:           return allocName(u"PurgeQueue");
         case eMethFlushPublish:         return allocName(u"FlushPublish");
         case eMethBasicConsumeMessages: return allocName(u"BasicConsumeMessages");
+        case eMethStopConsume:          return allocName(u"StopConsume");
         default: return nullptr;
     }
 }
@@ -284,6 +297,7 @@ long RabbitMQClientNative::GetNParams(const long lMethodNum) {
         case eMethBasicAck:             return 2;  // tag + multiple (необязателен)
         case eMethBasicConsumeMessages: return 2;  // count + timeout
         case eMethBasicCancel:
+        case eMethStopConsume:
         case eMethFlushPublish:
         case eMethReconnect:            return 0;
         case eMethBasicReject:          return 2;  // tag + requeue (НОВЫЙ!)
@@ -417,6 +431,8 @@ bool RabbitMQClientNative::CallAsProc(const long lMethodNum,
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::basicRejectImpl, paParams, lSizeArray);
         case eMethSetPublishMode:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::setPublishModeImpl, paParams, lSizeArray);
+        case eMethStopConsume:
+            return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::stopConsumeImpl, paParams, lSizeArray);
         case eMethFlushPublish:
             return m_impl->wrapCall(m_impl.get(), &RabbitApi1S::flushPublishImpl, paParams, lSizeArray);
         case eMethDeleteQueue:
